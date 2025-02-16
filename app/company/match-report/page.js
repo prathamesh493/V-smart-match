@@ -99,11 +99,12 @@ export default function MatchReport() {
                   </div>
                 </div>
 
-                <div className="w-full py-3 px-6 bg-white/20 text-white rounded-full font-semibold hover:bg-white/30 transition-colors border border-white/20">
-                  <Link href="/company/report">
-                    View Profile
-                  </Link>
-                </div>
+                <Link 
+                  href="/company/report"
+                  className="block w-full py-3 px-6 bg-white/20 text-white text-center rounded-full font-semibold hover:bg-white/30 transition-colors border border-white/20"
+                >
+                  View Profile
+                </Link>
               </div>
             ))}
           </div>

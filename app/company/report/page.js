@@ -6,6 +6,7 @@ import { BookOpen, GitBranch, Star, Code, Award, FileText, BriefcaseIcon, Gradua
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import Header from '@/components/Header';
 
 const CompanyCandidateReport = () => {
   const [reportData, setReportData] = useState(null);
@@ -28,8 +29,8 @@ const CompanyCandidateReport = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#c6269e]"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
     );
   }
@@ -40,19 +41,20 @@ const CompanyCandidateReport = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">
+      <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-[#c6269e]">Candidate Report</h1>
+            <h1 className="text-3xl font-bold text-white">Candidate Report</h1>
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-lg font-semibold text-green-600">92% Match</span>
-              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-lg font-semibold text-white bg-green-500 px-3 py-1 rounded-full">92% Match</span>
+              <CheckCircle className="w-5 h-5 text-white" />
             </div>
           </div>
           <Button 
             onClick={handleExportPDF}
-            className="bg-[#c6269e] hover:bg-[#a81f85]"
+            className="bg-white text-purple-700 hover:bg-gray-100"
           >
             <Download className="w-4 h-4 mr-2" />
             Export PDF
@@ -80,14 +82,14 @@ const ProfileCard = ({ data }) => {
   if (!data) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Profile</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">Profile</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <div className="bg-[#c6269e] text-white p-3 rounded-full">
+            <div className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white p-3 rounded-full">
               <UserCircle className="w-6 h-6" />
             </div>
             <div>
@@ -105,7 +107,7 @@ const ProfileCard = ({ data }) => {
   );
 };
 
-// GitHub and LeetCode cards remain mostly the same, just remove any edit functionality
+// GitHub and LeetCode cards with updated styling
 const GithubStatsCard = ({ data }) => {
   if (!data) {
     return (
@@ -119,19 +121,19 @@ const GithubStatsCard = ({ data }) => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>GitHub Statistics</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">GitHub Statistics</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div className="text-center p-3 bg-gray-50 rounded">
-            <GitBranch className="w-6 h-6 mx-auto mb-1 text-[#c6269e]" />
+            <GitBranch className="w-6 h-6 mx-auto mb-1 text-purple-600" />
             <div className="text-sm text-gray-600">Repositories</div>
             <div className="font-semibold">{data.repositories}</div>
           </div>
           <div className="text-center p-3 bg-gray-50 rounded">
-            <Star className="w-6 h-6 mx-auto mb-1 text-[#c6269e]" />
+            <Star className="w-6 h-6 mx-auto mb-1 text-purple-600" />
             <div className="text-sm text-gray-600">Stars</div>
             <div className="font-semibold">{data.stars}</div>
           </div>
@@ -144,7 +146,7 @@ const GithubStatsCard = ({ data }) => {
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="percentage" fill="#c6269e" />
+              <Bar dataKey="percentage" fill="#c026d3" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -161,16 +163,17 @@ const LeetcodeStatsCard = ({ data }) => {
         icon={Code}
         buttonText="Connect LeetCode"
         onClick={() => console.log('Connect LeetCode')}
+        className="bg-white"
       />
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>LeetCode Statistics</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">LeetCode Statistics</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="grid grid-cols-3 gap-4 mb-4">
           <div className="text-center p-3 bg-gray-50 rounded">
             <div className="text-sm text-gray-600">Easy</div>
@@ -200,15 +203,32 @@ const LeetcodeStatsCard = ({ data }) => {
   );
 };
 
+const EmptyCard = ({ title, icon: Icon, buttonText, onClick, className = "" }) => {
+  return (
+    <Card className={`bg-white overflow-hidden ${className}`}>
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center justify-center py-8">
+        <Icon className="w-12 h-12 text-gray-300 mb-4" />
+        <p className="text-gray-500 mb-4 text-center">No {title.toLowerCase()} data available</p>
+        <Button onClick={onClick} variant="outline">
+          {buttonText}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
 const SkillsCard = ({ skills, jobRequiredSkills }) => {
   if (!skills?.length) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Skills</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">Skills</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="flex flex-wrap gap-2">
           {skills.map((skill, index) => {
             const isMatch = jobRequiredSkills.includes(skill);
@@ -226,6 +246,18 @@ const SkillsCard = ({ skills, jobRequiredSkills }) => {
               </span>
             );
           })}
+        </div>
+        <div className="mt-4">
+          <p className="text-sm text-gray-600 mb-2">Match with Job Requirements</p>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div 
+              className="bg-green-600 h-2.5 rounded-full" 
+              style={{ width: `${(skills.filter(s => jobRequiredSkills.includes(s)).length / jobRequiredSkills.length) * 100}%` }}
+            ></div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {skills.filter(s => jobRequiredSkills.includes(s)).length} out of {jobRequiredSkills.length} required skills
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -245,14 +277,14 @@ const ExperienceCard = ({ experience, jobKeywords }) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Work Experience</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">Work Experience</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="space-y-4">
           {experience.map((exp, index) => (
-            <div key={index} className="border-l-2 border-[#c6269e] pl-4">
+            <div key={index} className="border-l-2 border-purple-600 pl-4">
               <h3 className="font-medium text-gray-900">{exp.title}</h3>
               <p className="text-gray-600">{exp.company}</p>
               <p className="text-sm text-gray-500">
@@ -269,7 +301,6 @@ const ExperienceCard = ({ experience, jobKeywords }) => {
   );
 };
 
-// Education card remains mostly the same, just remove edit functionality
 const EducationCard = ({ education }) => {
   if (!education?.length) {
     return (
@@ -283,16 +314,14 @@ const EducationCard = ({ education }) => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <CardTitle>Education</CardTitle>
-        </div>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">Education</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="space-y-4">
           {education.map((edu, index) => (
-            <div key={index} className="border-l-2 border-[#c6269e] pl-4">
+            <div key={index} className="border-l-2 border-purple-600 pl-4">
               <h3 className="font-medium text-gray-900">{edu.degree}</h3>
               <p className="text-gray-600">{edu.school}</p>
               <p className="text-sm text-gray-500">{edu.graduationYear}</p>
@@ -320,16 +349,16 @@ const ProjectsCard = ({ projects, jobKeywords }) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Projects</CardTitle>
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white">Projects</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-4">
         <div className="space-y-4">
           {projects.map((project, index) => (
-            <div key={index} className="border-l-2 border-[#c6269e] pl-4">
+            <div key={index} className="border-l-2 border-purple-600 pl-4">
               <h3 className="font-medium text-gray-900">{project.name}</h3>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center flex-wrap gap-2 mt-1">
                 {project.technologies.map((tech, techIndex) => (
                   <span 
                     key={techIndex}
@@ -351,7 +380,7 @@ const ProjectsCard = ({ projects, jobKeywords }) => {
                   href={project.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-[#c6269e] hover:text-[#a81f85] mt-2 inline-block"
+                  className="text-sm text-purple-600 hover:text-purple-800 mt-2 inline-block"
                 >
                   View Project →
                 </a>

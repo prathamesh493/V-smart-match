@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Header from "../../../components/Header"
 import { Upload, Github, Code2, CheckCircle2, Brain, Trophy } from 'lucide-react'
+import Notification from "../../../components/Notification"
 
 export default function CandidateProfile() {
   const [formData, setFormData] = useState({
@@ -14,6 +15,8 @@ export default function CandidateProfile() {
     education: []
   })
   const [newSkill, setNewSkill] = useState("")
+  const [fileName, setFileName] = useState("") // New state for displaying filename
+  const [notification, setNotification] = useState(null) // For success/error notifications
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -21,6 +24,10 @@ export default function CandidateProfile() {
         const response = await fetch("/api/candidate/profile")
         const data = await response.json()
         setFormData(data)
+        // Set filename if resume exists in fetched data
+        if (data.resume && data.resume.name) {
+          setFileName(data.resume.name)
+        }
       } catch (error) {
         console.error("Error fetching profile:", error)
       }
@@ -45,6 +52,14 @@ export default function CandidateProfile() {
     })
   }
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      setFormData({...formData, resume: file})
+      setFileName(file.name) // Update the filename state
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
@@ -53,18 +68,61 @@ export default function CandidateProfile() {
         body: JSON.stringify(formData)
       })
       if (response.ok) {
-        // Show success message
+        // Show success notification
+        setNotification({
+          type: 'success',
+          message: 'Your profile has been successfully updated. Our AI is analyzing your data to match you with the best opportunities.'
+        })
+      } else {
+        // Show error notification for unsuccessful response
+        setNotification({
+          type: 'error',
+          message: 'There was a problem updating your profile. Please check your information and try again.'
+        })
       }
     } catch (error) {
       console.error("Error updating profile:", error)
+      // Show error notification for exception
+      setNotification({
+        type: 'error',
+        message: 'Connection error. Please check your internet connection and try again.'
+      })
     }
+  }
+  
+  // Helper to close the notification
+  const closeNotification = () => {
+    setNotification(null)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
       <Header />
+      {notification && (
+        <Notification
+          type={notification.type}
+          message={notification.message}
+          onClose={closeNotification}
+        />
+      )}
       <main className="container mx-auto px-4 py-16">
         <div className="max-w-3xl mx-auto">
+          {/* Add the animation classes to the global styles in your app */}
+          <style jsx global>{`
+            @keyframes slideInRight {
+              from {
+                transform: translateX(100%);
+                opacity: 0;
+              }
+              to {
+                transform: translateX(0);
+                opacity: 1;
+              }
+            }
+            .animate-slide-in-right {
+              animation: slideInRight 0.3s ease-out forwards;
+            }
+          `}</style>
           <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-4 animate-fade-in-up">
             Build Your Professional Profile
           </h1>
@@ -99,14 +157,19 @@ export default function CandidateProfile() {
                   <Upload className="h-5 w-5 text-primary" />
                   Resume Upload
                 </label>
-                <div className="input flex items-center gap-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => setFormData({...formData, resume: e.target.files[0]})}
-                    className="opacity-0 absolute inset-0 w-full cursor-pointer"
-                  />
-                  <span className="text-gray-500">PDF, DOC, or DOCX (Max 5MB)</span>
+                <div className="relative flex items-center gap-3 bg-gray-50 hover:bg-gray-100 transition-colors rounded-md p-3 cursor-pointer">
+                  <span className="text-gray-500">
+                    {fileName ? fileName : "PDF, DOC, or DOCX (Max 5MB)"}
+                  </span>
+                  <label className="ml-auto cursor-pointer bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded-md text-sm">
+                    Browse
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
                   Our AI will analyze your resume to extract skills and experience automatically.

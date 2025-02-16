@@ -5,20 +5,30 @@ export default function Header() {
   return (
     <header className="bg-transparent py-6">
       <div className="container mx-auto px-4 flex justify-between items-center">
-        <Link href="/" className="text-2xl font-bold text-white">
+        <Link href="/" className="text-2xl font-bold text-white hover:opacity-80 transition-opacity">
           vSmart Match
         </Link>
         <nav>
           <ul className="flex space-x-4">
             <li>
-              <Button variant="ghost" className="text-white hover:text-gray-200">
-                About
-              </Button>
+              <Link href="/about">
+                <Button 
+                  variant="ghost" 
+                  className="text-white bg-transparent hover:bg-white/10 hover:text-white backdrop-blur-sm transition-all duration-200"
+                >
+                  About
+                </Button>
+              </Link>
             </li>
             <li>
-              <Button variant="ghost" className="text-white hover:text-gray-200">
-                Features
-              </Button>
+              <Link href="/features">
+                <Button 
+                  variant="ghost" 
+                  className="text-white bg-transparent hover:bg-white/10 hover:text-white backdrop-blur-sm transition-all duration-200"
+                >
+                  Features
+                </Button>
+              </Link>
             </li>
           </ul>
         </nav>

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import health, resume, match, profile
+from api.routes import health, resume, match, profile, job_description
 
 app = FastAPI(
     title="VSmart API",
@@ -21,8 +21,9 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(resume.router, prefix="/api", tags=["resume"])
-app.include_router(match.router, prefix="/api", tags=["match"])
-app.include_router(profile.router, prefix="/api", tags=["profile"])
+app.include_router(job_description.router, prefix="/api", tags=["job_description"])
+#app.include_router(match.router, prefix="/api", tags=["match"])
+#app.include_router(profile.router, prefix="/api", tags=["profile"])
 
 if __name__ == "__main__":
     import uvicorn

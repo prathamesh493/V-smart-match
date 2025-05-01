@@ -45,3 +45,5 @@ site/
 
 # Jupyter Notebooks
 .ipynb_checkpoints
+
+firebase-credentials.json

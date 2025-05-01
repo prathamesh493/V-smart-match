@@ -1,26 +1,20 @@
 import os
 from dotenv import load_dotenv
-from pathlib import Path
 
 # Load environment variables from .env file
 load_dotenv()
 
-# API Keys
+# API keys
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GITHUB_API_TOKEN = os.getenv("GITHUB_API_TOKEN")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-04-17")
 
-# Path configurations
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-RESUME_UPLOAD_DIR = DATA_DIR / "resumes"
-JD_DIR = DATA_DIR / "jd"
+# Firebase/Firestore config
+FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase-credentials.json")
 
-# Ensure directories exist
-RESUME_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-JD_DIR.mkdir(parents=True, exist_ok=True)
+# Application settings
+MAX_UPLOAD_SIZE =  10 * 1024 * 1024 # 10MB by default
+ALLOWED_FILE_TYPES = ["application/pdf"]
+RESUME_STORAGE_PATH = os.getenv("RESUME_STORAGE_PATH", "data/resumes")
 
-# API Settings
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
-ALLOWED_RESUME_TYPES = ["application/pdf", "application/msword", 
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        "text/plain"]
+# Create storage directory if it doesn't exist
+os.makedirs(RESUME_STORAGE_PATH, exist_ok=True)

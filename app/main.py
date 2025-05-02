@@ -23,7 +23,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(resume.router, prefix="/api", tags=["resume"])
 app.include_router(job_description.router, prefix="/api", tags=["job_description"])
 app.include_router(match.router, prefix="/api", tags=["match"])
-#app.include_router(profile.router, prefix="/api", tags=["profile"])
+app.include_router(profile.router, prefix="/api", tags=["profile", "leetcode"])
 
 if __name__ == "__main__":
     import uvicorn

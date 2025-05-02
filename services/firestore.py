@@ -124,3 +124,10 @@ async def get_user_resumes(user_id: str) -> list:
         return [doc.to_dict() for doc in resumes]
     except Exception as e:
         raise Exception(f"Failed to retrieve user resumes: {str(e)}")
+
+async def get_user_data(collection: str, doc_id: str):
+    doc = db.collection(collection).document(doc_id).get()
+    return doc.to_dict() if doc.exists else None
+
+async def store_user_data(collection: str, doc_id: str, data: dict):
+    db.collection(collection).document(doc_id).set(data)

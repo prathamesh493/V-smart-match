@@ -1,16 +1,18 @@
 'use client';
 
-// app/signin/page.js
+// app/signup/page.js
 import { useState, useEffect } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase/config';
 import Link from 'next/link';
 
-export default function SignIn() {
+export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -24,45 +26,68 @@ export default function SignIn() {
     }
   }, [searchParams]);
 
-  const handleSignIn = async (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
+    
+    // Basic validation
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setError('Password should be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Sign in with Firebase Authentication
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Verify user type in Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (!userDoc.exists()) {
-        setError('User profile not found');
-        await auth.signOut();
-        setLoading(false);
-        return;
-      }
+      // Create user profile in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        email,
+        fullName,
+        userType,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
 
-      const userData = userDoc.data();
-      
-      // Check if user is trying to access the correct portal
-      if (userData.userType !== userType) {
-        setError(`You're not registered as a ${userType}. Please select the correct user type.`);
-        await auth.signOut();
-        setLoading(false);
-        return;
-      }
-
-      // Redirect based on user type
+      // Create specific collection based on user type
       if (userType === 'candidate') {
-        router.push('/candidate');
+        await setDoc(doc(db, 'candidates', user.uid), {
+          userId: user.uid,
+          fullName,
+          email,
+          skills: [],
+          experience: [],
+          education: [],
+          resumeUrl: '',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        router.push('/signin');
       } else {
-        router.push('/company');
+        await setDoc(doc(db, 'employers', user.uid), {
+          userId: user.uid,
+          companyName: fullName,
+          email,
+          industry: '',
+          companySize: '',
+          location: '',
+          companyDescription: '',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        router.push('/signin');
       }
     } catch (error) {
-      console.error('Error signing in:', error);
-      setError(error.message || 'Failed to sign in');
+      console.error('Error signing up:', error);
+      setError(error.message || 'Failed to sign up');
       setLoading(false);
     }
   };
@@ -71,7 +96,7 @@ export default function SignIn() {
     <div className="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to your account
+          Create a new account
         </h2>
       </div>
 
@@ -88,7 +113,7 @@ export default function SignIn() {
                     : 'bg-gray-200 text-gray-700'
                 }`}
               >
-                Candidate
+                I'm a Candidate
               </button>
               <button
                 type="button"
@@ -99,12 +124,29 @@ export default function SignIn() {
                     : 'bg-gray-200 text-gray-700'
                 }`}
               >
-                Employer
+                I'm an Employer
               </button>
             </div>
           </div>
 
-          <form className="space-y-6" onSubmit={handleSignIn}>
+          <form className="space-y-6" onSubmit={handleSignUp}>
+            <div>
+              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
+                {userType === 'candidate' ? 'Full Name' : 'Company Name'}
+              </label>
+              <div className="mt-1">
+                <input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+            </div>
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
@@ -132,7 +174,6 @@ export default function SignIn() {
                   id="password"
                   name="password"
                   type="password"
-                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -141,23 +182,20 @@ export default function SignIn() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Confirm Password
+              </label>
+              <div className="mt-1">
                 <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                  Forgot your password?
-                </a>
               </div>
             </div>
 
@@ -179,29 +217,18 @@ export default function SignIn() {
                   loading ? 'opacity-70 cursor-not-allowed' : ''
                 }`}
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? 'Creating account...' : 'Sign up'}
               </button>
             </div>
           </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or</span>
-              </div>
-            </div>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link href={`/signup?userType=${userType}`} className="font-medium text-blue-600 hover:text-blue-500">
-                  Sign up
-                </Link>
-              </p>
-            </div>
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link href="/signin" className="font-medium text-blue-600 hover:text-blue-500">
+                Sign in
+              </Link>
+            </p>
           </div>
         </div>
       </div>

@@ -1,10 +1,26 @@
+'use client';
 //app\company\page.js
 
 import { FileText, PieChart, Bell } from 'lucide-react'
 import Link from 'next/link'
 import Header from '@/components/Header'
+import { useAuth } from '@/lib/useAuth'; // Adjust path
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function RecruiterDashboard() {
+
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Redirect to signin if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      console.log('Redirecting to sign-in: No authenticated user');
+      router.push('/signin');
+    }
+  }, [user, loading, router]);
+
   const features = [
     {
       title: "Upload Job Listing",

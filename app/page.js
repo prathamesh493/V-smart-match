@@ -18,14 +18,14 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6 animate-fade-in-up animation-delay-400">
               <Link
-                href="/company"
+                href="/signin?userType=employer"
                 className="btn-primary group"
               >
                 For Recruiters
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
               </Link>
               <Link
-                href="/candidate"
+                href="/signin?userType=candidate"
                 className="btn-secondary group"
               >
                 For Candidates

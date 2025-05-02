@@ -1,46 +1,56 @@
-import { FileUp, UserCircle, Briefcase } from 'lucide-react'
-import Link from 'next/link'
-import Header from '@/components/Header'
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { FileUp, UserCircle, Briefcase } from 'lucide-react';
+import Link from 'next/link';
+import Header from '@/components/Header';
+import { useAuth } from '@/lib/useAuth'; // Adjust path
 
 export default function CandidateDashboard() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Redirect to signin if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      console.log('Redirecting to sign-in: No authenticated user');
+      router.push('/signin');
+    }
+  }, [user, loading, router]);
+
   const features = [
     {
-      title: "Quick Profile Setup",
-      description: "Upload your resume, add additional skills, and connect your LeetCode & GitHub profiles - all in under 2 minutes.",
+      title: 'Quick Profile Setup',
+      description:
+        'Upload your resume, add additional skills, and connect your LeetCode & GitHub profiles - all in under 2 minutes.',
       icon: FileUp,
-      href: "/candidate/profile",
-      gradient: "from-emerald-500 to-teal-600",
-      highlights: [
-        "One-click resume upload",
-        "Auto-skill extraction",
-        "GitHub & LeetCode integration"
-      ]
+      href: '/candidate/profile',
+      gradient: 'from-emerald-500 to-teal-600',
+      highlights: ['One-click resume upload', 'Auto-skill extraction', 'GitHub & LeetCode integration'],
     },
     {
-      title: "Your Profile Report",
-      description: "View your comprehensive skill profile extracted from your resume and online presence.",
+      title: 'Your Profile Report',
+      description: 'View your comprehensive skill profile extracted from your resume and online presence.',
       icon: UserCircle,
-      href: "/candidate/report",
-      gradient: "from-violet-500 to-purple-600",
-      highlights: [
-        "Extracted skills overview",
-        "Experience analysis",
-        "Project highlights"
-      ]
+      href: '/candidate/report',
+      gradient: 'from-violet-500 to-purple-600',
+      highlights: ['Extracted skills overview', 'Experience analysis', 'Project highlights'],
     },
     {
-      title: "Smart Job Matches",
-      description: "Discover jobs that perfectly match your skills - no more endless applying. Let opportunities find you.",
+      title: 'Smart Job Matches',
+      description: 'Discover jobs that perfectly match your skills - no more endless applying. Let opportunities find you.',
       icon: Briefcase,
-      href: "/candidate/dashboard",
-      gradient: "from-orange-500 to-pink-600",
-      highlights: [
-        "AI-powered job matching",
-        "Match percentage breakdown",
-        "Direct recruiter connections"
-      ]
-    }
-  ]
+      href: '/candidate/dashboard',
+      gradient: 'from-orange-500 to-pink-600',
+      highlights: ['AI-powered job matching', 'Match percentage breakdown', 'Direct recruiter connections'],
+    },
+  ];
+
+  // Show loading state while checking auth
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-white">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
@@ -53,9 +63,9 @@ export default function CandidateDashboard() {
           <p className="text-xl text-white/90 text-center mb-16 animate-fade-in-up animation-delay-200">
             Let AI-powered matching connect you with the perfect opportunities. No more endless job applications.
           </p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-fade-in-up animation-delay-400">
-            {features.map((feature, index) => (
+            {features.map((feature) => (
               <Link
                 key={feature.title}
                 href={feature.href}
@@ -111,5 +121,5 @@ export default function CandidateDashboard() {
         </div>
       </main>
     </div>
-  )
+  );
 }

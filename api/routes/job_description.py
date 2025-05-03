@@ -10,7 +10,7 @@ from ..schemas.resume import ErrorResponse
 from services.job_description import extract_job_description_data
 from services.job_firestore import store_job_description_data, get_job_description_data, get_user_job_descriptions, delete_job_description
 
-router = APIRouter(prefix="/job-description", tags=["Job Description"])
+router = APIRouter(prefix="/job-description", tags=["job_description"])
 
 @router.post(
     "/upload",

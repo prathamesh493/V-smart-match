@@ -22,7 +22,7 @@ async def store_resume_data(
     parsed_data: Dict[str, Any]
 ) -> str:
     """
-    Store resume data in Firestore
+    Store resume data in Firestore and link it to a candidate profile
     
     Args:
         user_id: User ID to associate with this resume
@@ -60,27 +60,41 @@ async def store_resume_data(
             
             doc_data["metadata"] = safe_metadata
         
-        # Store in Firestore (use user_id as doc_id or generate one)
-        # First check if user exists
-        user_ref = db.collection("users").document(user_id)
-        user_doc = await asyncio.to_thread(lambda: user_ref.get())
-        
-        # Store resume data
+        # Store in Firestore
         resume_ref = db.collection("resumes").document()
         await asyncio.to_thread(lambda: resume_ref.set(doc_data))
         
-        # Update user document with reference to this resume
-        user_data = {
+        # Check if candidate profile exists, if not create one
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = await asyncio.to_thread(lambda: candidate_ref.get())
+        
+        # Update candidate document with reference to this resume
+        candidate_data = {
             "latest_resume_id": resume_ref.id,
             "latest_resume_timestamp": datetime.now(),
-            "has_resume": True
+            "has_resume": True,
+            "updated_at": datetime.now()
         }
         
-        if not user_doc.exists:
-            # Create user if doesn't exist
-            user_data["created_at"] = datetime.now()
+        if not candidate_doc.exists:
+            # Create candidate if doesn't exist
+            candidate_data["created_at"] = datetime.now()
+            candidate_data["user_id"] = user_id
             
-        await asyncio.to_thread(lambda: user_ref.set(user_data, merge=True))
+        await asyncio.to_thread(lambda: candidate_ref.set(candidate_data, merge=True))
+        
+        # Make sure user exists but don't store resume reference there
+        user_ref = db.collection("users").document(user_id)
+        user_doc = await asyncio.to_thread(lambda: user_ref.get())
+        
+        if not user_doc.exists:
+            # Create minimal user if doesn't exist
+            user_data = {
+                "created_at": datetime.now(),
+                "candidate_profile_id": user_id,  # Reference to candidate profile
+                "has_candidate_profile": True
+            }
+            await asyncio.to_thread(lambda: user_ref.set(user_data, merge=True))
         
         return resume_ref.id
     except Exception as e:

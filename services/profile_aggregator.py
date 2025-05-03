@@ -11,13 +11,14 @@ from services.firestore import get_user_data, store_user_data
 # Initialize the LeetCode service
 leetcode_service = LeetcodeService()
 
-async def get_leetcode_data(username: str, force_refresh: bool = False) -> Dict[str, Any]:
+async def get_leetcode_data(username: str, force_refresh: bool = False, user_id: str = None) -> Dict[str, Any]:
     """
     Get LeetCode profile data for a user
     
     Args:
         username: LeetCode username
         force_refresh: Force a refresh from LeetCode API instead of using cached data
+        user_id: Optional user ID to associate with this profile
         
     Returns:
         Dictionary containing LeetCode profile data
@@ -38,7 +39,7 @@ async def get_leetcode_data(username: str, force_refresh: bool = False) -> Dict[
         raise Exception(f"LeetCode user '{username}' not found or API request failed")
     
     # Store the data in Firestore
-    await store_leetcode_data(username, leetcode_data)
+    await store_leetcode_data(username, leetcode_data, user_id)
     
     return leetcode_data
 
@@ -63,23 +64,60 @@ async def get_cached_leetcode_data(username: str) -> Optional[Dict[str, Any]]:
     return cached_data.get("profile_data", {})
 
 
-async def store_leetcode_data(username: str, profile_data: Dict[str, Any]) -> None:
+async def store_leetcode_data(username: str, profile_data: Dict[str, Any], user_id: str = None) -> None:
     """
-    Store LeetCode profile data in Firestore
+    Store LeetCode profile data in Firestore and associate it with a candidate profile
     
     Args:
         username: LeetCode username
         profile_data: Dictionary containing LeetCode profile data
+        user_id: Optional user ID to associate with this profile
     """
     # Create a document to store
+    timestamp = datetime.now()
     document = {
         "username": username,
-        "timestamp": datetime.now(),
+        "timestamp": timestamp,
         "profile_data": profile_data
     }
     
     # Store in Firestore
     await store_user_data("leetcode_profiles", username, document)
+    
+    # If user_id is provided, associate with a candidate profile
+    if user_id:
+        db = get_db()
+        
+        # Update or create candidate document with reference to this LeetCode profile
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = candidate_ref.get()
+        
+        candidate_data = {
+            "leetcode_username": username,
+            "leetcode_profile_timestamp": timestamp,
+            "has_leetcode_profile": True,
+            "updated_at": timestamp
+        }
+        
+        # Create or update candidate document
+        if not candidate_doc.exists:
+            candidate_data["created_at"] = timestamp
+            candidate_data["user_id"] = user_id
+            
+        candidate_ref.set(candidate_data, merge=True)
+        
+        # Make sure user exists with reference to candidate profile
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            # Create minimal user if doesn't exist
+            user_data = {
+                "created_at": timestamp,
+                "candidate_profile_id": user_id,
+                "has_candidate_profile": True
+            }
+            user_ref.set(user_data, merge=True)
 
 async def get_github_data(username: str, user_id: str = None, force_refresh: bool = False) -> Dict[str, Any]:
     """
@@ -149,7 +187,7 @@ async def get_cached_github_data(username: str, user_id: str) -> Optional[Dict[s
 
 async def store_github_data(username: str, insights_data: Dict[str, Any], markdown_content: str, user_id: str) -> str:
     """
-    Store GitHub profile data in Firestore
+    Store GitHub profile data in Firestore and associate it with a candidate profile
     
     Args:
         username: GitHub username
@@ -178,31 +216,37 @@ async def store_github_data(username: str, insights_data: Dict[str, Any], markdo
         github_ref = db.collection("github_profiles").document()
         github_ref.set(doc_data)
         
-        # Update user document with reference to this GitHub profile
-        user_ref = db.collection("users").document(user_id)
-        user_doc = user_ref.get()
+        # Update or create candidate document with reference to this GitHub profile
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = candidate_ref.get()
         
-        user_data = {
+        candidate_data = {
             "github_profile_id": github_ref.id,
             "github_username": username,
             "github_profile_timestamp": timestamp,
-            "has_github_profile": True
+            "has_github_profile": True,
+            "updated_at": timestamp
         }
         
-        # Create or update user document
-        if not user_doc.exists:
-            user_data["created_at"] = timestamp
+        # Create or update candidate document
+        if not candidate_doc.exists:
+            candidate_data["created_at"] = timestamp
+            candidate_data["user_id"] = user_id
             
-        user_ref.set(user_data, merge=True)
+        candidate_ref.set(candidate_data, merge=True)
         
-        # Also add to user's profiles collection
-        user_profiles_ref = user_ref.collection("profiles").document(github_ref.id)
-        user_profiles_ref.set({
-            "profile_id": github_ref.id,
-            "profile_type": "github",
-            "username": username,
-            "timestamp": timestamp
-        })
+        # Make sure user exists with reference to candidate profile
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            # Create minimal user if doesn't exist
+            user_data = {
+                "created_at": timestamp,
+                "candidate_profile_id": user_id,
+                "has_candidate_profile": True
+            }
+            user_ref.set(user_data, merge=True)
         
         return github_ref.id
     except Exception as e:

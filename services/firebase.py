@@ -303,29 +303,31 @@ async def link_candidate_profiles(user_id: str, profile_links: Dict[str, str]) -
     """
     try:
         db = get_db()
-        user_ref = db.collection("users").document(user_id)
         
-        # Get the current user document
-        user_doc = user_ref.get()
+        # Create or update candidate profile in a dedicated collection
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = candidate_ref.get()
         
-        # Prepare data to update
-        update_data = {}
+        # Prepare data for candidate document
+        candidate_data = {
+            "updated_at": datetime.now(),
+        }
         
         # Add links to different profile types
         if 'resume_id' in profile_links and profile_links['resume_id']:
-            update_data['latest_resume_id'] = profile_links['resume_id']
-            update_data['has_resume'] = True
+            candidate_data['latest_resume_id'] = profile_links['resume_id']
+            candidate_data['has_resume'] = True
             
         if 'github_profile_id' in profile_links and profile_links['github_profile_id']:
-            update_data['github_profile_id'] = profile_links['github_profile_id']
-            update_data['has_github_profile'] = True
+            candidate_data['github_profile_id'] = profile_links['github_profile_id']
+            candidate_data['has_github_profile'] = True
             
         if 'github_username' in profile_links and profile_links['github_username']:
-            update_data['github_username'] = profile_links['github_username']
+            candidate_data['github_username'] = profile_links['github_username']
             
         if 'leetcode_username' in profile_links and profile_links['leetcode_username']:
-            update_data['leetcode_username'] = profile_links['leetcode_username']
-            update_data['has_leetcode_profile'] = True
+            candidate_data['leetcode_username'] = profile_links['leetcode_username']
+            candidate_data['has_leetcode_profile'] = True
         
         # Add a combined profiles field for easy retrieval
         linked_profiles = {}
@@ -337,15 +339,35 @@ async def link_candidate_profiles(user_id: str, profile_links: Dict[str, str]) -
             linked_profiles['leetcode'] = profile_links['leetcode_username']
             
         if linked_profiles:
-            update_data['linked_profiles'] = linked_profiles
-            update_data['profiles_last_updated'] = datetime.now()
-            
-        # Create or update the user document
-        if user_doc.exists:
-            user_ref.update(update_data)
+            candidate_data['linked_profiles'] = linked_profiles
+            candidate_data['profiles_last_updated'] = datetime.now()
+        
+        # Create or update the candidate document
+        if candidate_doc.exists:
+            # Merge with existing data instead of overwriting
+            candidate_ref.update(candidate_data)
         else:
-            update_data['created_at'] = datetime.now()
-            user_ref.set(update_data)
+            candidate_data['created_at'] = datetime.now()
+            candidate_data['user_id'] = user_id  # Store reference to the user
+            candidate_ref.set(candidate_data)
+            
+        # Add a reference to the candidate profile in the user document
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+        
+        if user_doc.exists:
+            user_ref.update({
+                "candidate_profile_id": user_id,
+                "has_candidate_profile": True,
+                "profiles_last_updated": datetime.now()
+            })
+        else:
+            # Create minimal user document if it doesn't exist
+            user_ref.set({
+                "created_at": datetime.now(),
+                "candidate_profile_id": user_id,
+                "has_candidate_profile": True
+            })
             
         # Create the unified candidate profile document
         await create_unified_candidate_profile(user_id)
@@ -367,20 +389,26 @@ async def create_unified_candidate_profile(user_id: str) -> Optional[Dict[str, A
     """
     try:
         db = get_db()
-        user_ref = db.collection("users").document(user_id)
-        user_doc = user_ref.get()
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = candidate_ref.get()
         
-        if not user_doc.exists:
-            return None
+        if not candidate_doc.exists:
+            # Fallback to user document if candidate doesn't exist
+            user_ref = db.collection("users").document(user_id)
+            user_doc = user_ref.get()
+            if not user_doc.exists:
+                return None
+            candidate_data = user_doc.to_dict()
+        else:
+            candidate_data = candidate_doc.to_dict()
             
-        user_data = user_doc.to_dict()
         unified_profile = {
             "user_id": user_id,
             "last_updated": datetime.now()
         }
         
         # Get resume data if available
-        resume_id = user_data.get('latest_resume_id')
+        resume_id = candidate_data.get('latest_resume_id')
         if resume_id:
             resume_doc = await get_document("resumes", resume_id)
             if resume_doc:
@@ -391,7 +419,7 @@ async def create_unified_candidate_profile(user_id: str) -> Optional[Dict[str, A
                 }
         
         # Get GitHub profile data if available
-        github_profile_id = user_data.get('github_profile_id')
+        github_profile_id = candidate_data.get('github_profile_id')
         if github_profile_id:
             github_doc = await get_document("github_profiles", github_profile_id)
             if github_doc:
@@ -416,7 +444,7 @@ async def create_unified_candidate_profile(user_id: str) -> Optional[Dict[str, A
                 unified_profile["github"] = github_summary
         
         # Get LeetCode profile data if available
-        leetcode_username = user_data.get('leetcode_username')
+        leetcode_username = candidate_data.get('leetcode_username')
         if leetcode_username:
             leetcode_doc = await get_document("leetcode_profiles", leetcode_username)
             if leetcode_doc:

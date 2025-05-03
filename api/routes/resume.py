@@ -9,7 +9,7 @@ from ..schemas.resume import ResumeResponse, ErrorResponse
 from services.gemini import extract_resume_data
 from services.firestore import store_resume_data
 
-router = APIRouter(prefix="/resume", tags=["Resume"])
+router = APIRouter(prefix="/resume", tags=["resume"])
 
 @router.post(
     "/upload",

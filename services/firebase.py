@@ -288,3 +288,187 @@ async def batch_add_documents(collection_name: str, documents: List[Dict[str, An
     except Exception as e:
         print(f"Error batch adding documents: {e}")
         raise
+
+async def link_candidate_profiles(user_id: str, profile_links: Dict[str, str]) -> bool:
+    """
+    Link multiple profile types for a candidate (resume, GitHub, LeetCode).
+    
+    Args:
+        user_id: The user ID of the candidate
+        profile_links: Dictionary containing profile IDs to link, with keys like
+                      'resume_id', 'github_profile_id', 'leetcode_username'
+        
+    Returns:
+        True if linking was successful, False otherwise
+    """
+    try:
+        db = get_db()
+        user_ref = db.collection("users").document(user_id)
+        
+        # Get the current user document
+        user_doc = user_ref.get()
+        
+        # Prepare data to update
+        update_data = {}
+        
+        # Add links to different profile types
+        if 'resume_id' in profile_links and profile_links['resume_id']:
+            update_data['latest_resume_id'] = profile_links['resume_id']
+            update_data['has_resume'] = True
+            
+        if 'github_profile_id' in profile_links and profile_links['github_profile_id']:
+            update_data['github_profile_id'] = profile_links['github_profile_id']
+            update_data['has_github_profile'] = True
+            
+        if 'github_username' in profile_links and profile_links['github_username']:
+            update_data['github_username'] = profile_links['github_username']
+            
+        if 'leetcode_username' in profile_links and profile_links['leetcode_username']:
+            update_data['leetcode_username'] = profile_links['leetcode_username']
+            update_data['has_leetcode_profile'] = True
+        
+        # Add a combined profiles field for easy retrieval
+        linked_profiles = {}
+        if 'resume_id' in profile_links and profile_links['resume_id']:
+            linked_profiles['resume'] = profile_links['resume_id']
+        if 'github_profile_id' in profile_links and profile_links['github_profile_id']:
+            linked_profiles['github'] = profile_links['github_profile_id']
+        if 'leetcode_username' in profile_links and profile_links['leetcode_username']:
+            linked_profiles['leetcode'] = profile_links['leetcode_username']
+            
+        if linked_profiles:
+            update_data['linked_profiles'] = linked_profiles
+            update_data['profiles_last_updated'] = datetime.now()
+            
+        # Create or update the user document
+        if user_doc.exists:
+            user_ref.update(update_data)
+        else:
+            update_data['created_at'] = datetime.now()
+            user_ref.set(update_data)
+            
+        # Create the unified candidate profile document
+        await create_unified_candidate_profile(user_id)
+        
+        return True
+    except Exception as e:
+        print(f"Error linking candidate profiles: {e}")
+        return False
+
+async def create_unified_candidate_profile(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Create a unified candidate profile combining data from resume, GitHub, and LeetCode.
+    
+    Args:
+        user_id: The user ID of the candidate
+        
+    Returns:
+        Unified candidate profile data, or None if creation failed
+    """
+    try:
+        db = get_db()
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            return None
+            
+        user_data = user_doc.to_dict()
+        unified_profile = {
+            "user_id": user_id,
+            "last_updated": datetime.now()
+        }
+        
+        # Get resume data if available
+        resume_id = user_data.get('latest_resume_id')
+        if resume_id:
+            resume_doc = await get_document("resumes", resume_id)
+            if resume_doc:
+                unified_profile["resume"] = {
+                    "id": resume_id,
+                    "extracted_content": resume_doc.get("extracted_content"),
+                    "timestamp": resume_doc.get("timestamp")
+                }
+        
+        # Get GitHub profile data if available
+        github_profile_id = user_data.get('github_profile_id')
+        if github_profile_id:
+            github_doc = await get_document("github_profiles", github_profile_id)
+            if github_doc:
+                # Extract key skills and stats from GitHub
+                github_username = github_doc.get("github_username")
+                insights_data = github_doc.get("insights_data", {})
+                
+                github_summary = {
+                    "id": github_profile_id,
+                    "username": github_username,
+                    "timestamp": github_doc.get("timestamp")
+                }
+                
+                # Include top languages if available
+                if insights_data and "top_languages" in insights_data:
+                    github_summary["top_languages"] = list(insights_data.get("top_languages", {}).keys())[:5]
+                    
+                # Include contribution activity if available
+                if insights_data and "contribution_activity" in insights_data:
+                    github_summary["activity"] = insights_data.get("contribution_activity")
+                    
+                unified_profile["github"] = github_summary
+        
+        # Get LeetCode profile data if available
+        leetcode_username = user_data.get('leetcode_username')
+        if leetcode_username:
+            leetcode_doc = await get_document("leetcode_profiles", leetcode_username)
+            if leetcode_doc:
+                # Extract key stats from LeetCode
+                profile_data = leetcode_doc.get("profile_data", {})
+                
+                leetcode_summary = {
+                    "username": leetcode_username,
+                    "timestamp": leetcode_doc.get("timestamp")
+                }
+                
+                # Extract solving stats if available
+                user_problems = profile_data.get("userProblemsSolved", {})
+                matched_user = user_problems.get("matchedUser", {})
+                if matched_user and "submitStatsGlobal" in matched_user:
+                    submit_stats = matched_user.get("submitStatsGlobal", {}).get("acSubmissionNum", [])
+                    if submit_stats:
+                        leetcode_summary["problems_solved"] = {
+                            item.get("difficulty"): item.get("count") for item in submit_stats
+                        }
+                
+                unified_profile["leetcode"] = leetcode_summary
+        
+        # Store the unified profile
+        unified_ref = db.collection("unified_profiles").document(user_id)
+        unified_ref.set(unified_profile)
+        
+        return unified_profile
+    except Exception as e:
+        print(f"Error creating unified candidate profile: {e}")
+        return None
+
+async def get_unified_candidate_profile(user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the unified candidate profile for a user.
+    
+    Args:
+        user_id: The user ID of the candidate
+        
+    Returns:
+        Unified candidate profile data, or None if not found
+    """
+    try:
+        db = get_db()
+        profile_ref = db.collection("unified_profiles").document(user_id)
+        profile_doc = profile_ref.get()
+        
+        if profile_doc.exists:
+            return document_to_dict(profile_doc)
+        else:
+            # Try to create it if it doesn't exist but we have profile data
+            return await create_unified_candidate_profile(user_id)
+    except Exception as e:
+        print(f"Error getting unified candidate profile: {e}")
+        return None

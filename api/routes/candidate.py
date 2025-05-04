@@ -33,8 +33,20 @@ async def link_profiles(
     The endpoint accepts at least one profile ID to link (resume_id, github_profile_id,
     or leetcode_username). IDs provided must reference existing documents in the system.
     """
-    # Use the authenticated user's ID and candidate ID
+    # Use the authenticated user's ID or the one provided in the request (if any)
     user_id = current_user.user_id
+    # If user_id is provided in the request and it's not the same as the authenticated user,
+    # check if the current user has permission to modify another user's profile (admin check)
+    if profile_link.user_id and profile_link.user_id != user_id:
+        # For now, only allow admins to modify other users' profiles
+        if current_user.user_id != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to modify this profile"
+            )
+        user_id = profile_link.user_id
+        
+    # Use the appropriate candidate ID
     candidate_id = current_user.candidate_id if current_user.candidate_id else user_id
     
     # Log the authentication and candidate info for debugging

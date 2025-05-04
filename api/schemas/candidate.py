@@ -27,7 +27,7 @@ class LeetcodeSummary(BaseModel):
 
 class ProfileLinkRequest(BaseModel):
     """Schema for linking candidate profile types"""
-    user_id: str = Field(..., description="User ID for the candidate")
+    user_id: Optional[str] = Field(None, description="User ID for the candidate (optional, defaults to authenticated user)")
     resume_id: Optional[str] = Field(None, description="ID of the candidate's resume document")
     github_profile_id: Optional[str] = Field(None, description="ID of the candidate's GitHub profile document")
     github_username: Optional[str] = Field(None, description="Candidate's GitHub username")

@@ -21,7 +21,7 @@ export default function CandidateProfile() {
     experience: [],
     education: []
   })
-  const [userId, setUserId] = useState(null) // Initialize as null instead of demo_user
+  const [userId, setUserId] = useState(null)
   const [newSkill, setNewSkill] = useState("")
   const [fileName, setFileName] = useState("") // For displaying filename
   const [notification, setNotification] = useState(null) // For notifications
@@ -29,6 +29,7 @@ export default function CandidateProfile() {
   const [apiConnectionError, setApiConnectionError] = useState(false) // API connection error state
   const [profileData, setProfileData] = useState(null) // Profile data from backend
   const [isExtracting, setIsExtracting] = useState(false) // Extracting state
+  const [uploadProgress, setUploadProgress] = useState(0) // For tracking upload progress
 
   // Get userId from authentication
   useEffect(() => {
@@ -120,6 +121,15 @@ export default function CandidateProfile() {
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setNotification({
+          type: 'error',
+          message: 'File size exceeds 5MB limit'
+        })
+        e.target.value = null // Reset file input
+        return
+      }
+      
       setFormData({...formData, resume: file})
       setFileName(file.name) // Update the filename state
     }
@@ -137,13 +147,13 @@ export default function CandidateProfile() {
     
     try {
       setIsLoading(true);
+      setUploadProgress(0);
       
       // Get auth token
       const token = await user.getIdToken();
       
       const formData = new FormData();
       formData.append('file', file);
-      // Backend gets user_id from authentication token
       
       const response = await axios.post(
         `${API_BASE_URL}/api/resume/upload`,
@@ -152,6 +162,10 @@ export default function CandidateProfile() {
           headers: {
             'Content-Type': 'multipart/form-data',
             'Authorization': `Bearer ${token}`
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percentCompleted);
           }
         }
       );
@@ -161,9 +175,6 @@ export default function CandidateProfile() {
         type: 'success',
         message: 'Resume uploaded successfully!'
       });
-      
-      // Refresh candidate profile after upload
-      fetchCandidateProfile();
       
       return response.data; // Return the response data for further processing
       
@@ -176,77 +187,22 @@ export default function CandidateProfile() {
       return null;
     } finally {
       setIsLoading(false);
+      setUploadProgress(0);
     }
   }
 
-  const fetchGitHubProfile = async (githubUsername) => {
-    if (!githubUsername) return null
-    
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/github/${githubUsername}`)
-      return response.data
-    } catch (error) {
-      console.warn('Error fetching GitHub profile:', error)
-      return null
-    }
+  const handleGitHubInputChange = (e) => {
+    setFormData({ ...formData, github: e.target.value });
   }
 
-  const fetchLeetCodeProfile = async (leetcodeUsername) => {
-    if (!leetcodeUsername) return null
-    
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/leetcode/${leetcodeUsername}`)
-      return response.data
-    } catch (error) {
-      console.warn('Error fetching LeetCode profile:', error)
-      return null
-    }
-  }
-
-  // Link GitHub and LeetCode profiles
-  const linkProfiles = async (formData) => {
-    try {
-      setIsLoading(true)
-      
-      // Get auth token
-      const token = await user.getIdToken()
-      
-      const response = await axios.post(
-        `${API_BASE_URL}/api/candidate/link-profiles`,
-        {
-          github_username: formData.github,
-          leetcode_username: formData.leetcode
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      )
-      
-      console.log("Link profiles response:", response.data)
-      setNotification({
-        type: 'success',
-        message: 'Profiles linked successfully!'
-      })
-      
-      // Refresh candidate profile after linking
-      fetchCandidateProfile()
-      
-    } catch (error) {
-      console.error("Error linking profiles:", error)
-      setNotification({
-        type: 'error',
-        message: error.response?.data?.message || 'Failed to link profiles. Please try again.'
-      })
-    } finally {
-      setIsLoading(false)
-    }
+  const handleLeetCodeInputChange = (e) => {
+    setFormData({ ...formData, leetcode: e.target.value });
   }
 
   // Helper functions to extract usernames from URLs
   const extractGitHubUsername = (input) => {
+    if (!input) return "";
+    
     // If it's already just a username, return it
     if (!input.includes('/') && !input.includes('.')) {
       return input.trim();
@@ -272,6 +228,8 @@ export default function CandidateProfile() {
   };
   
   const extractLeetCodeUsername = (input) => {
+    if (!input) return "";
+    
     // If it's already just a username, return it
     if (!input.includes('/') && !input.includes('.')) {
       return input.trim();
@@ -297,102 +255,109 @@ export default function CandidateProfile() {
   };
 
   const handleGithubProfileExtract = async () => {
-    if (!formData.github || !user) return
+    if (!formData.github || !user) {
+      setNotification({
+        type: 'error',
+        message: 'Please enter a GitHub username'
+      });
+      return;
+    }
     
-    setIsExtracting(true)
+    setIsExtracting(true);
     
     try {
       // Get auth token
-      const token = await user.getIdToken()
+      const token = await user.getIdToken();
       
-      // Extract GitHub username from URL
-      const githubUrl = formData.github.trim()
-      const githubUsername = githubUrl.endsWith('/') 
-        ? githubUrl.split('/').slice(-2)[0] 
-        : githubUrl.split('/').pop()
+      // Extract GitHub username from URL or use as is
+      const githubUsername = extractGitHubUsername(formData.github);
       
-      console.log('Extracting GitHub profile for:', githubUsername)
+      console.log('Extracting GitHub profile for:', githubUsername);
       
-      // Call backend API to extract GitHub profile with authentication
-      await axios.post(
-        `${API_BASE_URL}/api/candidate/link-profiles`, 
-        { github_username: githubUsername },
+      // Call the correct GitHub API endpoint
+      const response = await axios.get(
+        `${API_BASE_URL}/api/github/${githubUsername}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         }
-      )
+      );
       
       setNotification({
         type: 'success',
         message: 'GitHub profile linked successfully!'
-      })
+      });
       
       // Refresh profile data after linking GitHub
-      await fetchCandidateProfile()
+      await fetchCandidateProfile();
       
     } catch (error) {
-      console.error('Error extracting GitHub profile:', error)
+      console.error('Error extracting GitHub profile:', error);
       setNotification({
         type: 'error',
         message: error.response?.data?.message || 'Error linking GitHub profile. Please try again.'
-      })
+      });
     } finally {
-      setIsExtracting(false)
+      setIsExtracting(false);
     }
-  }
+  };
 
   const handleLeetcodeProfileExtract = async () => {
-    if (!formData.leetcode || !user) return
+    if (!formData.leetcode || !user) {
+      setNotification({
+        type: 'error',
+        message: 'Please enter a LeetCode username'
+      });
+      return;
+    }
     
-    setIsExtracting(true)
+    setIsExtracting(true);
     
     try {
       // Get auth token
-      const token = await user.getIdToken()
+      const token = await user.getIdToken();
       
-      // Extract LeetCode username from URL
-      const leetcodeUrl = formData.leetcode.trim()
-      const leetcodeUsername = leetcodeUrl.endsWith('/') 
-        ? leetcodeUrl.split('/').slice(-2)[0] 
-        : leetcodeUrl.split('/').pop()
+      // Extract LeetCode username from URL or use as is
+      const leetcodeUsername = extractLeetCodeUsername(formData.leetcode);
       
-      console.log('Extracting LeetCode profile for:', leetcodeUsername)
+      console.log('Extracting LeetCode profile for:', leetcodeUsername);
       
       // Call backend API to extract LeetCode profile with authentication
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE_URL}/api/candidate/link-profiles`, 
-        { leetcode_username: leetcodeUsername },
+        { 
+          leetcode_username: leetcodeUsername 
+        },
         {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         }
-      )
+      );
       
       setNotification({
         type: 'success',
         message: 'LeetCode profile linked successfully!'
-      })
+      });
       
       // Refresh profile data after linking LeetCode
-      await fetchCandidateProfile()
+      await fetchCandidateProfile();
       
     } catch (error) {
-      console.error('Error extracting LeetCode profile:', error)
+      console.error('Error extracting LeetCode profile:', error);
       setNotification({
         type: 'error',
         message: error.response?.data?.message || 'Error linking LeetCode profile. Please try again.'
-      })
+      });
     } finally {
-      setIsExtracting(false)
+      setIsExtracting(false);
     }
-  }
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
     
     try {
       // Extract usernames from URLs or direct input
@@ -400,62 +365,76 @@ export default function CandidateProfile() {
       const leetcodeUsername = extractLeetCodeUsername(formData.leetcode);
       
       // Initialize profile links object
-      const profileLinks = {
-        user_id: userId,
-        resume_id: profileData?.resume?.id || null,
-        github_username: githubUsername || null,
-        leetcode_username: leetcodeUsername || null,
-        skills: formData.skills
-      }
+      let resumeId = profileData?.resume?.id || null;
       
       // Step 1: Upload resume if provided
       if (formData.resume instanceof File) {
         try {
-          console.log('Uploading resume...')
-          const resumeData = await uploadResume(formData.resume)
-          console.log('Resume upload success:', resumeData)
-          
-          // Update the resume ID in profile links
-          profileLinks.resume_id = resumeData.doc_id
+          console.log('Uploading resume...');
+          const resumeData = await uploadResume(formData.resume);
+          if (resumeData) {
+            console.log('Resume upload success:', resumeData);
+            resumeId = resumeData.doc_id;
+          }
         } catch (error) {
-          console.error('Resume upload failed:', error)
-          throw new Error('Resume upload failed. Please try again.')
+          console.error('Resume upload failed:', error);
+          throw new Error('Resume upload failed. Please try again.');
         }
       }
       
       // Step 2: Link profiles
-      console.log('Linking profiles with data:', profileLinks)
-      const linkResponse = await linkProfiles(profileLinks)
-      console.log('Profile linking success:', linkResponse)
+      if (githubUsername || leetcodeUsername || resumeId) {
+        try {
+          // Get auth token
+          const token = await user.getIdToken();
+          
+          const linkResponse = await axios.post(
+            `${API_BASE_URL}/api/candidate/link-profiles`,
+            {
+              github_username: githubUsername || null,
+              leetcode_username: leetcodeUsername || null,
+              skills: formData.skills
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            }
+          );
+          
+          console.log('Profile linking success:', linkResponse.data);
+        } catch (error) {
+          console.error('Error linking profiles:', error);
+          throw new Error('Error linking profiles. Please try again.');
+        }
+      }
       
       // Show success notification
       setNotification({
         type: 'success',
         message: 'Your profile has been successfully updated. Our AI is analyzing your data to match you with the best opportunities.'
-      })
+      });
       
       // Refresh profile data after update
-      setTimeout(() => {
-        window.location.reload()
-      }, 2000)
+      fetchCandidateProfile();
       
     } catch (error) {
-      console.error("Error updating profile:", error)
+      console.error("Error updating profile:", error);
       
       // Show error notification
       setNotification({
         type: 'error',
         message: error.response?.data?.detail || error.message || 'There was a problem updating your profile. Please try again.'
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
   
   // Helper to close the notification
   const closeNotification = () => {
-    setNotification(null)
-  }
+    setNotification(null);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
@@ -513,123 +492,176 @@ export default function CandidateProfile() {
 
           {/* Main Form */}
           <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 animate-fade-in-up animation-delay-400">
+            {apiConnectionError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-6">
+                <p className="font-medium">Can't connect to the API server</p>
+                <p className="text-sm mt-1">Please check that the backend is running and accessible.</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Resume Upload */}
               <div className="md:col-span-2">
-                <label className="label flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <Upload className="h-5 w-5 text-primary" />
                   Resume Upload
                 </label>
-                <div className="relative flex items-center gap-3 bg-gray-50 hover:bg-gray-100 transition-colors rounded-md p-3 cursor-pointer">
-                  <span className="text-gray-500">
-                    {fileName ? fileName : "PDF, DOC, or DOCX (Max 5MB)"}
-                  </span>
-                  <label className="ml-auto cursor-pointer bg-gray-200 hover:bg-gray-300 py-1 px-3 rounded-md text-sm">
-                    Browse
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
+                <div className="relative">
+                  <input
+                    type="file"
+                    id="resume"
+                    name="resume"
+                    onChange={handleFileChange}
+                    accept=".pdf,.doc,.docx"
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="resume"
+                    className="relative flex items-center gap-3 bg-gray-50 hover:bg-gray-100 transition-colors rounded-md p-3 cursor-pointer border border-gray-300"
+                  >
+                    <Upload className="h-5 w-5 text-gray-500" />
+                    <span className="text-gray-500">
+                      {fileName ? fileName : "PDF, DOC, or DOCX (Max 5MB)"}
+                    </span>
                   </label>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Our AI will analyze your resume to extract skills and experience automatically.
+                {uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="mt-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div
+                        className="bg-blue-600 h-2.5 rounded-full"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Uploading: {uploadProgress}%</p>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Our AI will extract your skills, experience, and education automatically
                 </p>
               </div>
-              
-              <div>
-                <label className="label flex items-center gap-2">
+
+              {/* GitHub Profile */}
+              <div className="col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <Github className="h-5 w-5 text-primary" />
                   GitHub Profile
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.github}
-                    onChange={(e) => setFormData({...formData, github: e.target.value})}
-                    className="input pl-10"
-                    placeholder="Username or https://github.com/username"
-                  />
+                <div className="flex space-x-2">
+                  <div className="flex-grow">
+                    <input
+                      type="text"
+                      id="github"
+                      name="github"
+                      placeholder="Username or URL"
+                      value={formData.github}
+                      onChange={handleGitHubInputChange}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGithubProfileExtract}
+                    disabled={isExtracting || !formData.github}
+                    className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isExtracting ? "Linking..." : "Link"}
+                  </button>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Enter your GitHub username or full profile URL.
+                <p className="text-xs text-gray-500 mt-1">
+                  Connect your GitHub to showcase your projects and contributions
                 </p>
               </div>
-              
-              <div>
-                <label className="label flex items-center gap-2">
+
+              {/* LeetCode Profile */}
+              <div className="col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                   <Code2 className="h-5 w-5 text-primary" />
                   LeetCode Profile
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.leetcode}
-                    onChange={(e) => setFormData({...formData, leetcode: e.target.value})}
-                    className="input pl-10"
-                    placeholder="Username or https://leetcode.com/username"
-                  />
+                <div className="flex space-x-2">
+                  <div className="flex-grow">
+                    <input
+                      type="text"
+                      id="leetcode"
+                      name="leetcode"
+                      placeholder="Username or URL"
+                      value={formData.leetcode}
+                      onChange={handleLeetCodeInputChange}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLeetcodeProfileExtract}
+                    disabled={isExtracting || !formData.leetcode}
+                    className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isExtracting ? "Linking..." : "Link"}
+                  </button>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Enter your LeetCode username or full profile URL.
+                <p className="text-xs text-gray-500 mt-1">
+                  Connect your LeetCode profile to highlight your coding skills
                 </p>
               </div>
-              
+
+              {/* Skills */}
               <div className="md:col-span-2">
-                <label className="label flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-primary" />
-                  Additional Skills
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                  Skills
                 </label>
-                <div className="flex gap-2 mb-2">
+                <div className="flex space-x-2 mb-2">
                   <input
                     type="text"
                     value={newSkill}
                     onChange={(e) => setNewSkill(e.target.value)}
-                    className="input"
-                    placeholder="Add a skill..."
+                    placeholder="Add a skill (e.g., React, Python, AWS)"
+                    className="flex-grow border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSkill();
+                      }
+                    }}
                   />
                   <button
                     type="button"
                     onClick={handleAddSkill}
-                    className="btn-primary whitespace-nowrap"
+                    className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm font-medium"
                   >
-                    Add Skill
+                    Add
                   </button>
                 </div>
-                <p className="text-sm text-gray-500 mb-3">
-                  Add any skills not mentioned in your resume to improve job matches.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {formData.skills.map((skill) => (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.skills.map((skill, index) => (
                     <span
-                      key={skill}
-                      className="px-3 py-1 bg-gray-100 rounded-full flex items-center gap-2 hover:bg-gray-200 transition-colors"
+                      key={index}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
                     >
                       {skill}
                       <button
                         type="button"
                         onClick={() => handleRemoveSkill(skill)}
-                        className="text-gray-500 hover:text-gray-700"
+                        className="ml-1 text-blue-500 hover:text-blue-700"
                       >
+                        &times;
                       </button>
                     </span>
                   ))}
                 </div>
               </div>
-            </div>
-            
-            <div className="mt-8">
-              <button
-                type="submit"
-                className="btn-primary w-full flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 className="h-5 w-5" />
-                Complete Profile
-              </button>
-              <p className="text-center text-sm text-gray-500 mt-2">
-                Your profile will be automatically matched with relevant job opportunities.
-              </p>
+
+              {/* Submit Button */}
+              <div className="md:col-span-2 mt-6">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 px-4 rounded-md text-base font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Updating Profile...' : 'Update Profile'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

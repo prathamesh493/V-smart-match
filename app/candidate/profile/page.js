@@ -393,7 +393,7 @@ export default function CandidateProfile() {
             {
               github_username: githubUsername || null,
               leetcode_username: leetcodeUsername || null,
-              skills: formData.skills
+              resume_id: resumeId || null
             },
             {
               headers: {

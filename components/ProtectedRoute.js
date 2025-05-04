@@ -30,13 +30,18 @@ const ProtectedRoute = ({ children, userType }) => {
     }
   }, [currentUser, loading, router, userProfile, userType]);
 
-  // Show loading or nothing while checking auth
-  if (loading || !currentUser) {
+  // Show loading only while checking auth, not when user is definitely not logged in
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
+  }
+  
+  // If user is not logged in, don't render anything while redirecting
+  if (!currentUser) {
+    return null;
   }
 
   // If no userType is specified or userType matches, render children

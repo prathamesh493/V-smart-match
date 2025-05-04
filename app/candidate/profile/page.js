@@ -7,12 +7,14 @@ import Notification from "../../../components/Notification"
 import { ProfileCompletion } from "../../../components/ProfileCompletion"
 import axios from "axios"
 import { useAuth } from "../../../lib/useAuth"
+import { useRouter } from 'next/navigation'
 
 // Get API base URL from environment variable
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://mj.local:8000'
 
 export default function CandidateProfile() {
   const { user, loading: authLoading } = useAuth() // Use authentication hook
+  const router = useRouter() // Add router for redirects
   const [formData, setFormData] = useState({
     resume: null,
     github: "",
@@ -417,6 +419,11 @@ export default function CandidateProfile() {
       
       // Refresh profile data after update
       fetchCandidateProfile();
+      
+      // Redirect to candidate profile report after successful update
+      setTimeout(() => {
+        router.push('/candidate/report');
+      }, 1500); // Small delay to allow the user to see the success notification
       
     } catch (error) {
       console.error("Error updating profile:", error);

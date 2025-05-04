@@ -1,6 +1,6 @@
 // app/api/candidate/profile/route.js
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "next-auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://mj.local:8000";
 

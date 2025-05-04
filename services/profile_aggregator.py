@@ -23,11 +23,19 @@ async def get_leetcode_data(username: str, force_refresh: bool = False, user_id:
     Returns:
         Dictionary containing LeetCode profile data
     """
+    # For debugging
+    print(f"Fetching LeetCode data for username={username}, user_id={user_id}, force_refresh={force_refresh}")
+    
     # Check if we have cached data in Firestore
     if not force_refresh:
         cached_data = await get_cached_leetcode_data(username)
         if cached_data:
-            print("Data Already Present")
+            print("LeetCode data already present")
+            
+            # Even if we use cached data, make sure to link it to the user_id if provided
+            if user_id and cached_data:
+                await store_leetcode_association(username, user_id)
+                
             return cached_data
     
     # If no cached data or force refresh, fetch from LeetCode API
@@ -42,6 +50,58 @@ async def get_leetcode_data(username: str, force_refresh: bool = False, user_id:
     await store_leetcode_data(username, leetcode_data, user_id)
     
     return leetcode_data
+
+async def store_leetcode_association(username: str, user_id: str) -> bool:
+    """
+    Associate existing LeetCode data with a user ID without refetching the data
+    
+    Args:
+        username: LeetCode username
+        user_id: User ID to associate with this profile
+        
+    Returns:
+        True if successfully associated, False otherwise
+    """
+    try:
+        # Create reference to candidate collection
+        db = get_db()
+        timestamp = datetime.now()
+        
+        # Update or create candidate document with reference to this LeetCode profile
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = candidate_ref.get()
+        
+        candidate_data = {
+            "leetcode_username": username,
+            "leetcode_profile_timestamp": timestamp,
+            "has_leetcode_profile": True,
+            "updated_at": timestamp
+        }
+        
+        # Create or update candidate document
+        if not candidate_doc.exists:
+            candidate_data["created_at"] = timestamp
+            candidate_data["user_id"] = user_id
+            
+        candidate_ref.set(candidate_data, merge=True)
+        
+        # Make sure user exists with reference to candidate profile
+        user_ref = db.collection("users").document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            # Create minimal user if doesn't exist
+            user_data = {
+                "created_at": timestamp,
+                "candidate_profile_id": user_id,
+                "has_candidate_profile": True
+            }
+            user_ref.set(user_data, merge=True)
+        
+        return True
+    except Exception as e:
+        print(f"Error associating LeetCode data: {str(e)}")
+        return False
 
 async def get_cached_leetcode_data(username: str) -> Optional[Dict[str, Any]]:
     """
@@ -73,6 +133,9 @@ async def store_leetcode_data(username: str, profile_data: Dict[str, Any], user_
         profile_data: Dictionary containing LeetCode profile data
         user_id: Optional user ID to associate with this profile
     """
+    # For debugging
+    print(f"Storing LeetCode data for username={username}, user_id={user_id}")
+    
     # Create a document to store
     timestamp = datetime.now()
     document = {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 import os
 import uuid
@@ -9,6 +9,7 @@ from ..schemas.resume import ResumeResponse, ErrorResponse
 from services.gemini import extract_resume_data
 from services.firestore import store_resume_data
 import logging
+from api.auth import get_current_user, UserData
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,15 +25,18 @@ router = APIRouter(prefix="/resume", tags=["resume"])
 async def upload_resume(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    user_id: str = Form(...),
+    current_user: UserData = Depends(get_current_user),
 ):
     """
     Upload and process a resume PDF file
     - Saves the uploaded PDF temporarily
     - Extracts text using zerox
     - Processes the text with Gemini AI
-    - Stores structured data in Firestore under the provided user_id
+    - Stores structured data in Firestore under the authenticated user's ID
     """
+    # Get user ID from the authenticated user
+    user_id = current_user.user_id
+    
     # Validate file is PDF
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")

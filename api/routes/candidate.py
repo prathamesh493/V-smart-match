@@ -12,11 +12,15 @@ from services.firebase import (
     get_unified_candidate_profile,
     get_document
 )
+from api.auth import get_current_user, UserData
 
 router = APIRouter(prefix="/candidate", tags=["candidate"])
 
 @router.post("/link-profiles", status_code=status.HTTP_200_OK, response_model=ProfileLinkResponse)
-async def link_profiles(profile_link: ProfileLinkRequest):
+async def link_profiles(
+    profile_link: ProfileLinkRequest,
+    current_user: UserData = Depends(get_current_user)
+):
     """
     Link multiple profile types for a candidate (resume, GitHub, LeetCode).
     
@@ -24,12 +28,18 @@ async def link_profiles(profile_link: ProfileLinkRequest):
     for a single candidate, creating a unified profile that can be retrieved later.
     
     - Links resume document with GitHub and LeetCode profiles
-    - Creates a unified profile document for easier retrieval 
     - Updates the user document with references to all linked profiles
     
     The endpoint accepts at least one profile ID to link (resume_id, github_profile_id,
     or leetcode_username). IDs provided must reference existing documents in the system.
     """
+    # Use the authenticated user's ID and candidate ID
+    user_id = current_user.user_id
+    candidate_id = current_user.candidate_id if current_user.candidate_id else user_id
+    
+    # Log the authentication and candidate info for debugging
+    print(f"Auth: Using user_id={user_id}, candidate_id={candidate_id}")
+    
     # Verify that at least one profile reference is provided
     if not (profile_link.resume_id or profile_link.github_profile_id or 
             profile_link.github_username or profile_link.leetcode_username):
@@ -67,8 +77,8 @@ async def link_profiles(profile_link: ProfileLinkRequest):
     # Filter out None values
     profile_links = {k: v for k, v in profile_links.items() if v is not None}
     
-    # Link the profiles
-    success = await link_candidate_profiles(profile_link.user_id, profile_links)
+    # Use the candidate_id from the authenticated user for linking profiles
+    success = await link_candidate_profiles(candidate_id, profile_links)
     
     if not success:
         raise HTTPException(
@@ -76,14 +86,49 @@ async def link_profiles(profile_link: ProfileLinkRequest):
             detail="Failed to link profiles"
         )
     
+    # If GitHub username is provided, trigger GitHub API fetch
+    if profile_link.github_username:
+        try:
+            from services.profile_aggregator import get_github_data
+            print(f"Fetching GitHub data for username={profile_link.github_username}, user_id={candidate_id}")
+            
+            # Fetch GitHub data - use the candidate_id for storing
+            await get_github_data(
+                username=profile_link.github_username,
+                user_id=candidate_id,
+                force_refresh=True
+            )
+        except Exception as e:
+            # Log the error but don't fail the request
+            print(f"Warning: Failed to fetch GitHub data: {str(e)}")
+    
+    # If LeetCode username is provided, trigger LeetCode API fetch
+    if profile_link.leetcode_username:
+        try:
+            from services.profile_aggregator import get_leetcode_data
+            print(f"Fetching LeetCode data for username={profile_link.leetcode_username}, user_id={candidate_id}")
+            
+            # Fetch LeetCode data - use the candidate_id for storing
+            await get_leetcode_data(
+                username=profile_link.leetcode_username,
+                force_refresh=True,
+                user_id=candidate_id
+            )
+        except Exception as e:
+            # Log the error but don't fail the request
+            print(f"Warning: Failed to fetch LeetCode data: {str(e)}")
+    
     return ProfileLinkResponse(
         message="Profiles linked successfully",
-        user_id=profile_link.user_id,
+        user_id=user_id,
         linked_profiles=profile_links
     )
 
 @router.get("/profile/{user_id}", response_model=UnifiedCandidateProfile)
-async def get_candidate_profile(user_id: str):
+async def get_candidate_profile(
+    user_id: str,
+    current_user: UserData = Depends(get_current_user)
+):
     """
     Get the unified candidate profile with combined data from resume, GitHub, and LeetCode.
     
@@ -97,6 +142,13 @@ async def get_candidate_profile(user_id: str):
     If the unified profile doesn't exist but individual profiles are linked to the user,
     this endpoint will create the unified profile on-demand.
     """
+    # For security, users can only access their own profile unless they're an admin
+    if current_user.user_id != user_id and current_user.user_id != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this profile"
+        )
+    
     profile = await get_unified_candidate_profile(user_id)
     
     if not profile:
@@ -112,7 +164,8 @@ async def search_candidates(
     github_language: Optional[str] = None,
     leetcode_problems_min: Optional[int] = None,
     has_resume: Optional[bool] = None,
-    limit: int = 10
+    limit: int = 10,
+    current_user: UserData = Depends(get_current_user)
 ):
     """
     Search for candidates based on criteria from GitHub and LeetCode profiles.

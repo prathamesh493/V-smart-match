@@ -1,22 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel
-from datetime import datetime, timedelta
 
 from api.schemas.github import GitHubProfileResponse, ErrorResponse
 from services.profile_aggregator import get_github_data
+from api.auth import get_current_user, UserData, get_optional_user
 
 router = APIRouter()
-
-class UserDependency(BaseModel):
-    user_id: str
-
-# For demo purposes, this is a simple dependency function 
-# In a real application, this would validate authentication tokens
-async def get_current_user():
-    # In a real app, this would extract the user ID from the token
-    # For testing, you can update this to return a hardcoded user ID
-    return UserDependency(user_id="test-user-123")
 
 @router.get(
     "/github/{username}",
@@ -28,7 +17,7 @@ async def get_current_user():
 async def get_github_profile(
     username: str,
     force_refresh: bool = Query(False, description="Force refresh data from GitHub API instead of using cached data"),
-    current_user: UserDependency = Depends(get_current_user)
+    current_user: UserData = Depends(get_optional_user)
 ):
     """
     Retrieves GitHub profile data for a given username.
@@ -40,6 +29,7 @@ async def get_github_profile(
     """
     try:
         # Get GitHub data with caching through the profile aggregator
+        # Use the real authenticated user ID from the token
         data = await get_github_data(
             username=username,
             user_id=current_user.user_id,
@@ -57,7 +47,7 @@ async def get_github_profile(
     description="Lists all GitHub profiles that have been stored for the current authenticated user."
 )
 async def get_user_github_profiles(
-    current_user: UserDependency = Depends(get_current_user)
+    current_user: UserData = Depends(get_current_user)
 ):
     """
     Lists all GitHub profiles stored for the current user.

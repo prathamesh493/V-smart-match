@@ -4,7 +4,7 @@ export function ProfileCompletion({ profile }) {
       { key: 'resume', label: 'Upload Resume', completed: !!profile.resume },
       { key: 'github', label: 'Link GitHub', completed: !!profile.github },
       { key: 'leetcode', label: 'Link LeetCode', completed: !!profile.leetcode },
-      { key: 'skills', label: 'Add Skills', completed: profile.skills?.length > 0 },
+      // Skills step removed
     ];
   
     const completedSteps = steps.filter(step => step.completed).length;

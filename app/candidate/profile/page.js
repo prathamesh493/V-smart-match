@@ -9,9 +9,10 @@ import axios from "axios"
 import { useAuth } from "../../../lib/useAuth"
 
 // Get API base URL from environment variable
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://<api-url>:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://mj.local:8000'
 
 export default function CandidateProfile() {
+  const { user, loading: authLoading } = useAuth() // Use authentication hook
   const [formData, setFormData] = useState({
     resume: null,
     github: "",
@@ -20,74 +21,84 @@ export default function CandidateProfile() {
     experience: [],
     education: []
   })
-  const [userId, setUserId] = useState("demo_user") // Default user ID for demo
+  const [userId, setUserId] = useState(null) // Initialize as null instead of demo_user
   const [newSkill, setNewSkill] = useState("")
   const [fileName, setFileName] = useState("") // For displaying filename
   const [notification, setNotification] = useState(null) // For notifications
   const [isLoading, setIsLoading] = useState(false) // Loading state
   const [apiConnectionError, setApiConnectionError] = useState(false) // API connection error state
   const [profileData, setProfileData] = useState(null) // Profile data from backend
+  const [isExtracting, setIsExtracting] = useState(false) // Extracting state
 
-  // In a real app, you would get the userId from authentication
+  // Get userId from authentication
   useEffect(() => {
-    // For demo purposes - in production, get this from your auth system
-    const storedUserId = localStorage.getItem('userId') || "demo_user"
-    setUserId(storedUserId)
-  }, [])
+    if (user) {
+      console.log('Setting userId from auth:', user.uid)
+      setUserId(user.uid)
+    }
+  }, [user])
+
+  // Move fetchCandidateProfile outside the useEffect so it can be called from other functions
+  const fetchCandidateProfile = async () => {
+    if (!userId || !user) return
+    
+    setIsLoading(true)
+    setApiConnectionError(false)
+    
+    try {
+      // Get auth token
+      const token = await user.getIdToken()
+      
+      // Fetch unified candidate profile from backend with auth token
+      const response = await axios.get(`${API_BASE_URL}/api/candidate/profile/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      console.log('Profile data received:', response.data)
+      
+      const profileData = response.data
+      
+      // Update form data with profile information
+      setFormData({
+        resume: null, // File object will be set on upload
+        github: profileData.github?.username ? profileData.github.username : "",
+        leetcode: profileData.leetcode?.username ? profileData.leetcode.username : "",
+        skills: profileData.skills || [],
+        experience: profileData.experience || [],
+        education: profileData.education || []
+      })
+      
+      // Set profile data for other components
+      setProfileData(profileData)
+      
+      // Set filename if resume exists
+      if (profileData.resume && profileData.resume.file_name) {
+        setFileName(profileData.resume.file_name)
+      }
+    } catch (error) {
+      console.error('Error fetching candidate profile:', error)
+      
+      if (error.message && error.message.includes('Network Error')) {
+        setApiConnectionError(true)
+      } else if (error.response?.status === 404) {
+        // No profile found - this is okay for new users
+        console.log('No profile found for user, creating a new one')
+      } else {
+        setNotification({
+          type: 'error',
+          message: 'Error loading profile. Please try again later.'
+        })
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // Fetch profile data when userId changes
   useEffect(() => {
-    const fetchCandidateProfile = async () => {
-      if (!userId) return
-      
-      setIsLoading(true)
-      setApiConnectionError(false)
-      
-      try {
-        // Fetch unified candidate profile from backend
-        const response = await axios.get(`${API_BASE_URL}/api/candidate/profile/${userId}`)
-        console.log('Profile data received:', response.data)
-        
-        const profileData = response.data
-        
-        // Update form data with profile information
-        setFormData({
-          resume: null, // File object will be set on upload
-          github: profileData.github?.username ? `https://github.com/${profileData.github.username}` : "",
-          leetcode: profileData.leetcode?.username ? `https://leetcode.com/${profileData.leetcode.username}` : "",
-          skills: profileData.skills || [],
-          experience: profileData.experience || [],
-          education: profileData.education || []
-        })
-        
-        // Set profile data for other components
-        setProfileData(profileData)
-        
-        // Set filename if resume exists
-        if (profileData.resume && profileData.resume.file_name) {
-          setFileName(profileData.resume.file_name)
-        }
-      } catch (error) {
-        console.error('Error fetching candidate profile:', error)
-        
-        if (error.message && error.message.includes('Network Error')) {
-          setApiConnectionError(true)
-        } else if (error.response?.status === 404) {
-          // No profile found - this is okay for new users
-          console.log('No profile found for user, creating a new one')
-        } else {
-          setNotification({
-            type: 'error',
-            message: 'Error loading profile. Please try again later.'
-          })
-        }
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    
     fetchCandidateProfile()
-  }, [userId])
+  }, [userId, user])
 
   const handleAddSkill = () => {
     if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
@@ -114,23 +125,58 @@ export default function CandidateProfile() {
     }
   }
 
+  // Handle resume upload
   const uploadResume = async (file) => {
-    // Create form data for file upload
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('user_id', userId)
-
-    const response = await axios.post(
-      `${API_BASE_URL}/api/resume/upload`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      }
-    )
+    if (!user) {
+      setNotification({
+        type: 'error',
+        message: 'You must be logged in to upload a resume'
+      });
+      return null;
+    }
     
-    return response.data
+    try {
+      setIsLoading(true);
+      
+      // Get auth token
+      const token = await user.getIdToken();
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      // Backend gets user_id from authentication token
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/resume/upload`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      console.log("Resume upload response:", response.data);
+      setNotification({
+        type: 'success',
+        message: 'Resume uploaded successfully!'
+      });
+      
+      // Refresh candidate profile after upload
+      fetchCandidateProfile();
+      
+      return response.data; // Return the response data for further processing
+      
+    } catch (error) {
+      console.error("Error uploading resume:", error);
+      setNotification({
+        type: 'error',
+        message: error.response?.data?.detail || 'Failed to upload resume. Please try again.'
+      });
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   const fetchGitHubProfile = async (githubUsername) => {
@@ -157,13 +203,46 @@ export default function CandidateProfile() {
     }
   }
 
-  const linkProfiles = async (profileLinks) => {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/candidate/link-profiles`,
-      profileLinks
-    )
-    
-    return response.data
+  // Link GitHub and LeetCode profiles
+  const linkProfiles = async (formData) => {
+    try {
+      setIsLoading(true)
+      
+      // Get auth token
+      const token = await user.getIdToken()
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/candidate/link-profiles`,
+        {
+          github_username: formData.github,
+          leetcode_username: formData.leetcode
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+      
+      console.log("Link profiles response:", response.data)
+      setNotification({
+        type: 'success',
+        message: 'Profiles linked successfully!'
+      })
+      
+      // Refresh candidate profile after linking
+      fetchCandidateProfile()
+      
+    } catch (error) {
+      console.error("Error linking profiles:", error)
+      setNotification({
+        type: 'error',
+        message: error.response?.data?.message || 'Failed to link profiles. Please try again.'
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Helper functions to extract usernames from URLs
@@ -216,6 +295,100 @@ export default function CandidateProfile() {
       return input;
     }
   };
+
+  const handleGithubProfileExtract = async () => {
+    if (!formData.github || !user) return
+    
+    setIsExtracting(true)
+    
+    try {
+      // Get auth token
+      const token = await user.getIdToken()
+      
+      // Extract GitHub username from URL
+      const githubUrl = formData.github.trim()
+      const githubUsername = githubUrl.endsWith('/') 
+        ? githubUrl.split('/').slice(-2)[0] 
+        : githubUrl.split('/').pop()
+      
+      console.log('Extracting GitHub profile for:', githubUsername)
+      
+      // Call backend API to extract GitHub profile with authentication
+      await axios.post(
+        `${API_BASE_URL}/api/candidate/link-profiles`, 
+        { github_username: githubUsername },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+      
+      setNotification({
+        type: 'success',
+        message: 'GitHub profile linked successfully!'
+      })
+      
+      // Refresh profile data after linking GitHub
+      await fetchCandidateProfile()
+      
+    } catch (error) {
+      console.error('Error extracting GitHub profile:', error)
+      setNotification({
+        type: 'error',
+        message: error.response?.data?.message || 'Error linking GitHub profile. Please try again.'
+      })
+    } finally {
+      setIsExtracting(false)
+    }
+  }
+
+  const handleLeetcodeProfileExtract = async () => {
+    if (!formData.leetcode || !user) return
+    
+    setIsExtracting(true)
+    
+    try {
+      // Get auth token
+      const token = await user.getIdToken()
+      
+      // Extract LeetCode username from URL
+      const leetcodeUrl = formData.leetcode.trim()
+      const leetcodeUsername = leetcodeUrl.endsWith('/') 
+        ? leetcodeUrl.split('/').slice(-2)[0] 
+        : leetcodeUrl.split('/').pop()
+      
+      console.log('Extracting LeetCode profile for:', leetcodeUsername)
+      
+      // Call backend API to extract LeetCode profile with authentication
+      await axios.post(
+        `${API_BASE_URL}/api/candidate/link-profiles`, 
+        { leetcode_username: leetcodeUsername },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+      
+      setNotification({
+        type: 'success',
+        message: 'LeetCode profile linked successfully!'
+      })
+      
+      // Refresh profile data after linking LeetCode
+      await fetchCandidateProfile()
+      
+    } catch (error) {
+      console.error('Error extracting LeetCode profile:', error)
+      setNotification({
+        type: 'error',
+        message: error.response?.data?.message || 'Error linking LeetCode profile. Please try again.'
+      })
+    } finally {
+      setIsExtracting(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -439,7 +612,6 @@ export default function CandidateProfile() {
                         onClick={() => handleRemoveSkill(skill)}
                         className="text-gray-500 hover:text-gray-700"
                       >
-                        ×
                       </button>
                     </span>
                   ))}

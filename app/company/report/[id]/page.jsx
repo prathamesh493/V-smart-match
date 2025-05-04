@@ -10,7 +10,7 @@ import ClientCategoryScoresCard from './ClientCategoryScoresCard'
 
 async function getMatchReport(id) {
   try {
-    const response = await fetch(`http://localhost:8000/api/match/${id}`)
+    const response = await fetch(`http://mj.local:8000/api/match/${id}`)
     if (!response.ok) {
       throw new Error("Failed to fetch report data")
     }

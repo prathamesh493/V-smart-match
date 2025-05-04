@@ -4,6 +4,12 @@ import { useState, useEffect } from "react"
 import Header from "../../../components/Header"
 import { Upload, Github, Code2, CheckCircle2, Brain, Trophy } from 'lucide-react'
 import Notification from "../../../components/Notification"
+import { ProfileCompletion } from "../../../components/ProfileCompletion"
+import axios from "axios"
+import { useAuth } from "../../../lib/useAuth"
+
+// Get API base URL from environment variable
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://<api-url>:8000'
 
 export default function CandidateProfile() {
   const [formData, setFormData] = useState({
@@ -14,26 +20,74 @@ export default function CandidateProfile() {
     experience: [],
     education: []
   })
+  const [userId, setUserId] = useState("demo_user") // Default user ID for demo
   const [newSkill, setNewSkill] = useState("")
-  const [fileName, setFileName] = useState("") // New state for displaying filename
-  const [notification, setNotification] = useState(null) // For success/error notifications
+  const [fileName, setFileName] = useState("") // For displaying filename
+  const [notification, setNotification] = useState(null) // For notifications
+  const [isLoading, setIsLoading] = useState(false) // Loading state
+  const [apiConnectionError, setApiConnectionError] = useState(false) // API connection error state
+  const [profileData, setProfileData] = useState(null) // Profile data from backend
 
+  // In a real app, you would get the userId from authentication
   useEffect(() => {
-    const fetchProfile = async () => {
+    // For demo purposes - in production, get this from your auth system
+    const storedUserId = localStorage.getItem('userId') || "demo_user"
+    setUserId(storedUserId)
+  }, [])
+
+  // Fetch profile data when userId changes
+  useEffect(() => {
+    const fetchCandidateProfile = async () => {
+      if (!userId) return
+      
+      setIsLoading(true)
+      setApiConnectionError(false)
+      
       try {
-        const response = await fetch("/api/candidate/profile")
-        const data = await response.json()
-        setFormData(data)
-        // Set filename if resume exists in fetched data
-        if (data.resume && data.resume.name) {
-          setFileName(data.resume.name)
+        // Fetch unified candidate profile from backend
+        const response = await axios.get(`${API_BASE_URL}/api/candidate/profile/${userId}`)
+        console.log('Profile data received:', response.data)
+        
+        const profileData = response.data
+        
+        // Update form data with profile information
+        setFormData({
+          resume: null, // File object will be set on upload
+          github: profileData.github?.username ? `https://github.com/${profileData.github.username}` : "",
+          leetcode: profileData.leetcode?.username ? `https://leetcode.com/${profileData.leetcode.username}` : "",
+          skills: profileData.skills || [],
+          experience: profileData.experience || [],
+          education: profileData.education || []
+        })
+        
+        // Set profile data for other components
+        setProfileData(profileData)
+        
+        // Set filename if resume exists
+        if (profileData.resume && profileData.resume.file_name) {
+          setFileName(profileData.resume.file_name)
         }
       } catch (error) {
-        console.error("Error fetching profile:", error)
+        console.error('Error fetching candidate profile:', error)
+        
+        if (error.message && error.message.includes('Network Error')) {
+          setApiConnectionError(true)
+        } else if (error.response?.status === 404) {
+          // No profile found - this is okay for new users
+          console.log('No profile found for user, creating a new one')
+        } else {
+          setNotification({
+            type: 'error',
+            message: 'Error loading profile. Please try again later.'
+          })
+        }
+      } finally {
+        setIsLoading(false)
       }
     }
-    fetchProfile()
-  }, [])
+    
+    fetchCandidateProfile()
+  }, [userId])
 
   const handleAddSkill = () => {
     if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
@@ -60,33 +114,168 @@ export default function CandidateProfile() {
     }
   }
 
+  const uploadResume = async (file) => {
+    // Create form data for file upload
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('user_id', userId)
+
+    const response = await axios.post(
+      `${API_BASE_URL}/api/resume/upload`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    )
+    
+    return response.data
+  }
+
+  const fetchGitHubProfile = async (githubUsername) => {
+    if (!githubUsername) return null
+    
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/github/${githubUsername}`)
+      return response.data
+    } catch (error) {
+      console.warn('Error fetching GitHub profile:', error)
+      return null
+    }
+  }
+
+  const fetchLeetCodeProfile = async (leetcodeUsername) => {
+    if (!leetcodeUsername) return null
+    
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/leetcode/${leetcodeUsername}`)
+      return response.data
+    } catch (error) {
+      console.warn('Error fetching LeetCode profile:', error)
+      return null
+    }
+  }
+
+  const linkProfiles = async (profileLinks) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/api/candidate/link-profiles`,
+      profileLinks
+    )
+    
+    return response.data
+  }
+
+  // Helper functions to extract usernames from URLs
+  const extractGitHubUsername = (input) => {
+    // If it's already just a username, return it
+    if (!input.includes('/') && !input.includes('.')) {
+      return input.trim();
+    }
+    
+    // Handle full GitHub URLs or variations
+    try {
+      // Remove trailing slash if present
+      const cleaned = input.replace(/\/$/, '');
+      
+      // Handle github.com URLs
+      if (cleaned.includes('github.com/')) {
+        return cleaned.split('github.com/')[1].split('/')[0];
+      }
+      
+      // Handle direct usernames or other URL formats
+      const parts = cleaned.split('/');
+      return parts[parts.length - 1];
+    } catch (e) {
+      // If parsing fails, return original input
+      return input;
+    }
+  };
+  
+  const extractLeetCodeUsername = (input) => {
+    // If it's already just a username, return it
+    if (!input.includes('/') && !input.includes('.')) {
+      return input.trim();
+    }
+    
+    // Handle full LeetCode URLs or variations
+    try {
+      // Remove trailing slash if present
+      const cleaned = input.replace(/\/$/, '');
+      
+      // Handle leetcode.com URLs
+      if (cleaned.includes('leetcode.com/')) {
+        return cleaned.split('leetcode.com/')[1].split('/')[0];
+      }
+      
+      // Handle direct usernames or other URL formats
+      const parts = cleaned.split('/');
+      return parts[parts.length - 1];
+    } catch (e) {
+      // If parsing fails, return original input
+      return input;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setIsLoading(true)
+    
     try {
-      const response = await fetch("/api/candidate/profile", {
-        method: "PUT",
-        body: JSON.stringify(formData)
-      })
-      if (response.ok) {
-        // Show success notification
-        setNotification({
-          type: 'success',
-          message: 'Your profile has been successfully updated. Our AI is analyzing your data to match you with the best opportunities.'
-        })
-      } else {
-        // Show error notification for unsuccessful response
-        setNotification({
-          type: 'error',
-          message: 'There was a problem updating your profile. Please check your information and try again.'
-        })
+      // Extract usernames from URLs or direct input
+      const githubUsername = extractGitHubUsername(formData.github);
+      const leetcodeUsername = extractLeetCodeUsername(formData.leetcode);
+      
+      // Initialize profile links object
+      const profileLinks = {
+        user_id: userId,
+        resume_id: profileData?.resume?.id || null,
+        github_username: githubUsername || null,
+        leetcode_username: leetcodeUsername || null,
+        skills: formData.skills
       }
+      
+      // Step 1: Upload resume if provided
+      if (formData.resume instanceof File) {
+        try {
+          console.log('Uploading resume...')
+          const resumeData = await uploadResume(formData.resume)
+          console.log('Resume upload success:', resumeData)
+          
+          // Update the resume ID in profile links
+          profileLinks.resume_id = resumeData.doc_id
+        } catch (error) {
+          console.error('Resume upload failed:', error)
+          throw new Error('Resume upload failed. Please try again.')
+        }
+      }
+      
+      // Step 2: Link profiles
+      console.log('Linking profiles with data:', profileLinks)
+      const linkResponse = await linkProfiles(profileLinks)
+      console.log('Profile linking success:', linkResponse)
+      
+      // Show success notification
+      setNotification({
+        type: 'success',
+        message: 'Your profile has been successfully updated. Our AI is analyzing your data to match you with the best opportunities.'
+      })
+      
+      // Refresh profile data after update
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
+      
     } catch (error) {
       console.error("Error updating profile:", error)
-      // Show error notification for exception
+      
+      // Show error notification
       setNotification({
         type: 'error',
-        message: 'Connection error. Please check your internet connection and try again.'
+        message: error.response?.data?.detail || error.message || 'There was a problem updating your profile. Please try again.'
       })
+    } finally {
+      setIsLoading(false)
     }
   }
   
@@ -183,15 +372,15 @@ export default function CandidateProfile() {
                 </label>
                 <div className="relative">
                   <input
-                    type="url"
+                    type="text"
                     value={formData.github}
                     onChange={(e) => setFormData({...formData, github: e.target.value})}
                     className="input pl-10"
-                    placeholder="https://github.com/yourusername"
+                    placeholder="Username or https://github.com/username"
                   />
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  We'll analyze your repositories to highlight your coding expertise.
+                  Enter your GitHub username or full profile URL.
                 </p>
               </div>
               
@@ -202,15 +391,15 @@ export default function CandidateProfile() {
                 </label>
                 <div className="relative">
                   <input
-                    type="url"
+                    type="text"
                     value={formData.leetcode}
                     onChange={(e) => setFormData({...formData, leetcode: e.target.value})}
                     className="input pl-10"
-                    placeholder="https://leetcode.com/yourusername"
+                    placeholder="Username or https://leetcode.com/username"
                   />
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  Your problem-solving abilities will boost your match scores.
+                  Enter your LeetCode username or full profile URL.
                 </p>
               </div>
               

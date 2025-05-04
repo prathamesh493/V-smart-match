@@ -110,12 +110,12 @@ async def upload_resume(
 )
 async def get_resume_by_user_id_endpoint(
     user_id: str,
-    current_user: UserData = Depends(get_current_user),
 ):
     """
     Get a user's resume data by their user ID
     - Retrieves the structured resume data from Firestore
     - Returns the formatted resume content
+    - No authentication required
     """
     try:
         # Import the needed function

@@ -103,6 +103,38 @@ async def upload_resume(
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Resume processing failed: {str(e)}")
 
+@router.get(
+    "/{user_id}",
+    response_model=ResumeResponse,
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}
+)
+async def get_resume_by_user_id_endpoint(
+    user_id: str,
+    current_user: UserData = Depends(get_current_user),
+):
+    """
+    Get a user's resume data by their user ID
+    - Retrieves the structured resume data from Firestore
+    - Returns the formatted resume content
+    """
+    try:
+        # Import the needed function
+        from services.firestore import get_resume_by_user_id
+        
+        # Retrieve resume data from Firestore
+        resume_data = await get_resume_by_user_id(user_id)
+        
+        if not resume_data:
+            raise HTTPException(status_code=404, detail=f"No resume found for user ID: {user_id}")
+        
+        return resume_data
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Error retrieving resume data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve resume data: {str(e)}")
+
 def cleanup_file(file_path: str):
     """Remove temporary file after processing"""
     if os.path.exists(file_path):

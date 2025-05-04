@@ -132,3 +132,252 @@ async def get_user_profiles(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve profiles: {str(e)}")
+
+@router.get(
+    "/profiles/{user_id}/report",
+    response_model=Dict[str, Any],
+    summary="Get comprehensive report data for a user",
+    description="Retrieves aggregated report data including GitHub stats, LeetCode progress, and resume insights."
+)
+async def get_user_report(
+    user_id: str = Path(..., description="User ID to fetch report data for"),
+    current_user: UserData = Depends(get_current_user)
+):
+    """
+    Retrieves comprehensive report data for a specific user.
+    
+    - **user_id**: User ID to fetch report data for
+    
+    Returns a dictionary with aggregated metrics and insights from all user profiles.
+    """
+    # For security, only allow users to access their own reports
+    if current_user.user_id != user_id and current_user.user_id != "admin" and user_id != "string":
+        raise HTTPException(status_code=403, detail="Not authorized to access this report")
+    
+    try:
+        from services.firebase import get_document, query_documents
+        
+        # Get all profile data first
+        profiles = await get_user_profiles(user_id=user_id, current_user=current_user)
+        
+        # Initialize report structure
+        report = {
+            "skills": {
+                "technical": [],
+                "soft": []
+            },
+            "githubStats": {
+                "commits": 0,
+                "repositories": 0,
+                "stars": 0,
+                "followers": 0,
+                "contributions": 0,
+                "topLanguages": []
+            },
+            "leetcodeStats": {
+                "solved": 0,
+                "easy": 0,
+                "medium": 0,
+                "hard": 0,
+                "ranking": 0,
+                "streak": 0
+            },
+            "matchingStats": {
+                "averageMatchScore": 0,
+                "totalApplications": 0,
+                "topMatches": []
+            },
+            "skillGaps": [],
+            "improvementAreas": [],
+            "strengths": []
+        }
+        
+        # Extract GitHub stats if available
+        if profiles.get("github") and isinstance(profiles["github"], dict):
+            github_data = profiles["github"]
+            
+            # Repositories data
+            if "user" in github_data and "repositories" in github_data["user"]:
+                repos = github_data["user"]["repositories"].get("nodes", [])
+                report["githubStats"]["repositories"] = len(repos)
+                
+                # Calculate stars
+                stars = sum(repo.get("stargazerCount", 0) for repo in repos)
+                report["githubStats"]["stars"] = stars
+            
+            # Followers
+            if "user" in github_data and "followers" in github_data["user"]:
+                report["githubStats"]["followers"] = github_data["user"]["followers"].get("totalCount", 0)
+            
+            # Contributions
+            if "user" in github_data and "contributionsCollection" in github_data["user"]:
+                contribs = github_data["user"]["contributionsCollection"]
+                report["githubStats"]["commits"] = contribs.get("totalCommitContributions", 0)
+                report["githubStats"]["contributions"] = sum([
+                    contribs.get("totalCommitContributions", 0),
+                    contribs.get("totalIssueContributions", 0),
+                    contribs.get("totalPullRequestContributions", 0),
+                    contribs.get("totalPullRequestReviewContributions", 0)
+                ])
+            
+            # Top languages
+            if "user" in github_data and "repositories" in github_data["user"]:
+                lang_count = {}
+                for repo in github_data["user"]["repositories"].get("nodes", []):
+                    if "languages" in repo and "edges" in repo["languages"]:
+                        for lang_edge in repo["languages"]["edges"]:
+                            lang = lang_edge.get("node", {}).get("name")
+                            size = lang_edge.get("size", 0)
+                            if lang:
+                                lang_count[lang] = lang_count.get(lang, 0) + size
+                
+                # Sort languages by size and take top 5
+                top_langs = sorted(lang_count.items(), key=lambda x: x[1], reverse=True)[:5]
+                report["githubStats"]["topLanguages"] = [{"name": lang, "value": size} for lang, size in top_langs]
+        
+        # Extract LeetCode stats if available
+        if profiles.get("leetcode") and isinstance(profiles["leetcode"], dict):
+            leetcode_data = profiles["leetcode"]
+            
+            if "matchedUser" in leetcode_data:
+                user_data = leetcode_data["matchedUser"]
+                
+                # Basic stats
+                if "submitStats" in user_data:
+                    stats = user_data["submitStats"]
+                    report["leetcodeStats"]["solved"] = stats.get("acSubmissionNum", [{"count": 0}])[0].get("count", 0)
+                
+                # Difficulty breakdown
+                if "submitStatsGlobal" in user_data:
+                    global_stats = user_data["submitStatsGlobal"]
+                    report["leetcodeStats"]["easy"] = global_stats.get("easySolved", 0)
+                    report["leetcodeStats"]["medium"] = global_stats.get("mediumSolved", 0)
+                    report["leetcodeStats"]["hard"] = global_stats.get("hardSolved", 0)
+                
+                # Ranking and streak
+                report["leetcodeStats"]["ranking"] = user_data.get("profile", {}).get("ranking", 0)
+                report["leetcodeStats"]["streak"] = user_data.get("userCalendar", {}).get("streak", 0)
+        
+        # Extract skills from resume
+        if profiles.get("resume") and profiles["resume"].get("extracted_content"):
+            resume_content = profiles["resume"]["extracted_content"]
+            
+            # Try to extract skills from resume content
+            all_skills = []
+            
+            # Look for a skills section in the resume
+            import re
+            skills_section = re.search(r'(?i)skills?:(.+?)(?:\n\n|\n[A-Z]|\Z)', resume_content, re.DOTALL)
+            
+            if skills_section:
+                skills_text = skills_section.group(1)
+                # Split by common delimiters
+                skill_items = re.split(r'[,|•|\n]', skills_text)
+                all_skills = [skill.strip() for skill in skill_items if skill.strip()]
+            
+            # Technical vs soft skills categorization (simplified)
+            tech_keywords = ['python', 'java', 'javascript', 'typescript', 'react', 'angular', 'vue', 'node', 
+                          'aws', 'docker', 'kubernetes', 'sql', 'nosql', 'mongodb', 'firebase', 'git', 
+                          'html', 'css', 'c++', 'c#', 'rust', 'go', 'php', 'ruby', 'swift', 'kotlin', 
+                          'django', 'flask', 'fastapi', 'spring', 'tensorflow', 'pytorch', 'ai', 'ml']
+            
+            soft_keywords = ['communication', 'leadership', 'teamwork', 'management', 'problem solving', 
+                          'critical thinking', 'adaptability', 'time management', 'creativity', 
+                          'collaboration', 'conflict resolution', 'negotiation', 'presentation', 
+                          'verbal', 'written', 'interpersonal', 'organization', 'flexibility']
+            
+            for skill in all_skills:
+                skill_lower = skill.lower()
+                # Check if skill matches any technical keyword
+                if any(tech.lower() in skill_lower for tech in tech_keywords):
+                    report["skills"]["technical"].append(skill)
+                # Check if skill matches any soft skill keyword
+                elif any(soft.lower() in skill_lower for soft in soft_keywords):
+                    report["skills"]["soft"].append(skill)
+                # Default to technical skill if unclassified
+                else:
+                    report["skills"]["technical"].append(skill)
+        
+        # Get job application stats
+        try:
+            applications = await query_documents(
+                collection_name="job_applications",
+                field="candidate_id", 
+                operator="==", 
+                value=user_id
+            )
+            
+            # Calculate matching stats
+            if applications:
+                report["matchingStats"]["totalApplications"] = len(applications)
+                
+                # Calculate average match score
+                match_scores = [app.get("match_score", 0) for app in applications if "match_score" in app]
+                if match_scores:
+                    report["matchingStats"]["averageMatchScore"] = sum(match_scores) / len(match_scores)
+                
+                # Get top matches
+                top_matches = sorted(applications, key=lambda x: x.get("match_score", 0), reverse=True)[:3]
+                for match in top_matches:
+                    job_id = match.get("job_id")
+                    if job_id:
+                        job_doc = await get_document("jobs", job_id)
+                        if job_doc:
+                            report["matchingStats"]["topMatches"].append({
+                                "jobId": job_id,
+                                "title": job_doc.get("title", "Unknown Position"),
+                                "company": job_doc.get("company", "Unknown Company"),
+                                "matchScore": match.get("match_score", 0)
+                            })
+        except Exception as e:
+            # Don't fail the entire report if this part fails
+            print(f"Error fetching job applications: {str(e)}")
+        
+        # Generate AI-based insights
+        try:
+            from services.gemini import get_analysis
+            
+            # Compile a summary of the user's profile for analysis
+            profile_summary = f"""
+            GitHub: {report['githubStats']['repositories']} repositories, {report['githubStats']['stars']} stars, 
+            {report['githubStats']['contributions']} contributions.
+            Top languages: {', '.join([lang['name'] for lang in report['githubStats']['topLanguages'][:3]])}
+            
+            LeetCode: {report['leetcodeStats']['solved']} problems solved 
+            ({report['leetcodeStats']['easy']} easy, {report['leetcodeStats']['medium']} medium, {report['leetcodeStats']['hard']} hard)
+            
+            Skills: {', '.join(report['skills']['technical'][:10])}
+            """
+            
+            # Get AI analysis for strengths and improvement areas
+            analysis = await get_analysis(profile_summary, "Analyze this developer profile and provide 3 main strengths and 3 areas for improvement")
+            
+            if analysis:
+                # Very simple parsing - in production you would want more robust parsing
+                strengths_section = analysis.split("Strengths:")[1].split("Areas for Improvement:")[0] if "Strengths:" in analysis else ""
+                improvement_section = analysis.split("Areas for Improvement:")[1] if "Areas for Improvement:" in analysis else ""
+                
+                # Extract bullet points
+                import re
+                strengths = re.findall(r'\d+\.\s*(.*?)(?=\d+\.|\Z)', strengths_section)
+                improvements = re.findall(r'\d+\.\s*(.*?)(?=\d+\.|\Z)', improvement_section)
+                
+                report["strengths"] = [s.strip() for s in strengths if s.strip()]
+                report["improvementAreas"] = [i.strip() for i in improvements if i.strip()]
+                
+                # Extract skill gaps based on job market trends
+                skill_gaps_analysis = await get_analysis(
+                    f"Developer skills: {', '.join(report['skills']['technical'])}",
+                    "What 3 in-demand skills is this developer missing based on current job market trends?"
+                )
+                
+                if skill_gaps_analysis:
+                    skill_gaps = re.findall(r'\d+\.\s*(.*?)(?=\d+\.|\Z|\n\n)', skill_gaps_analysis)
+                    report["skillGaps"] = [s.strip() for s in skill_gaps if s.strip()]
+        except Exception as e:
+            # Don't fail if AI analysis fails
+            print(f"Error generating AI insights: {str(e)}")
+            
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")

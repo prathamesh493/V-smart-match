@@ -139,6 +139,49 @@ async def get_user_resumes(user_id: str) -> list:
     except Exception as e:
         raise Exception(f"Failed to retrieve user resumes: {str(e)}")
 
+async def get_resume_by_user_id(user_id: str) -> Dict[str, Any]:
+    """
+    Retrieve the latest resume data for a user from Firestore
+    
+    Args:
+        user_id: The user ID to retrieve resume data for
+        
+    Returns:
+        Latest resume data as dictionary or None if not found
+    """
+    try:
+        # First check if the user has a resume by looking at their candidate profile
+        candidate_ref = db.collection("candidates").document(user_id)
+        candidate_doc = await asyncio.to_thread(lambda: candidate_ref.get())
+        
+        if not candidate_doc.exists or not candidate_doc.to_dict().get("has_resume"):
+            return None
+            
+        # Get the latest resume ID from candidate profile if available
+        candidate_data = candidate_doc.to_dict()
+        latest_resume_id = candidate_data.get("latest_resume_id")
+        
+        if latest_resume_id:
+            # Get the specific latest resume
+            resume_ref = db.collection("resumes").document(latest_resume_id)
+            resume_doc = await asyncio.to_thread(lambda: resume_ref.get())
+            
+            if resume_doc.exists:
+                return resume_doc.to_dict()
+                
+        # Fallback: query all resumes for this user and get the latest one
+        resumes_query = db.collection("resumes").where("user_id", "==", user_id).order_by(
+            "timestamp", direction=firestore.Query.DESCENDING).limit(1)
+        
+        resumes = await asyncio.to_thread(lambda: resumes_query.get())
+        
+        if not resumes or len(resumes) == 0:
+            return None
+            
+        return resumes[0].to_dict()
+    except Exception as e:
+        raise Exception(f"Failed to retrieve resume data by user ID: {str(e)}")
+
 async def get_user_data(collection: str, doc_id: str):
     doc = db.collection(collection).document(doc_id).get()
     return doc.to_dict() if doc.exists else None

@@ -62,3 +62,60 @@ class CandidateSearchParams(BaseModel):
     has_resume: Optional[bool] = None
     skills: Optional[List[str]] = None
     limit: int = 10
+
+class Education(BaseModel):
+    """Schema for candidate education"""
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    field_of_study: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    description: Optional[str] = None
+    
+class Experience(BaseModel):
+    """Schema for candidate experience"""
+    company: Optional[str] = None
+    position: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    description: Optional[str] = None
+
+class CandidateReport(BaseModel):
+    """Schema for comprehensive candidate report"""
+    user_id: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    skills: Optional[List[str]] = None
+    education: Optional[List[Education]] = None
+    experience: Optional[List[Experience]] = None
+    
+    # Resume data
+    has_resume: Optional[bool] = None
+    resume_id: Optional[str] = None
+    resume_timestamp: Optional[datetime] = None
+    resume_content: Optional[str] = None
+    
+    # GitHub profile data
+    has_github_profile: Optional[bool] = None
+    github_username: Optional[str] = None
+    github_profile_id: Optional[str] = None
+    github_profile_timestamp: Optional[datetime] = None
+    github_top_languages: Optional[List[str]] = None
+    github_activity: Optional[Dict[str, int]] = None
+    
+    # LeetCode profile data
+    has_leetcode_profile: Optional[bool] = None
+    leetcode_username: Optional[str] = None
+    leetcode_profile_timestamp: Optional[datetime] = None
+    leetcode_problems_solved: Optional[Dict[str, int]] = None
+    
+    # Report metadata
+    generated_at: datetime = Field(default_factory=datetime.now)
+    
+    class Config:
+        # Allow arbitrary types for flexibility
+        arbitrary_types_allowed = True
+        # Convert datetime to string in json representation
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat() if dt else None
+        }

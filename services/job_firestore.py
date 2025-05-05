@@ -124,13 +124,13 @@ async def get_user_job_descriptions(user_id: str) -> List[Dict[str, Any]]:
         user_id: User ID to get job descriptions for
         
     Returns:
-        List of job description data dictionaries
+        List of job description data dictionaries with document IDs
     """
     try:
         jobs_ref = db.collection("job_descriptions").where("user_id", "==", user_id).order_by("timestamp", direction=firestore.Query.DESCENDING)
         jobs = await asyncio.to_thread(lambda: jobs_ref.get())
         
-        return [doc.to_dict() for doc in jobs]
+        return [{"id": doc.id, **doc.to_dict()} for doc in jobs]
     except Exception as e:
         raise Exception(f"Failed to retrieve user job descriptions: {str(e)}")
 

@@ -1,7 +1,7 @@
 'use client';
 //app\company\page.js
 
-import { FileText, PieChart, Bell } from 'lucide-react'
+import { FileText, PieChart, Bell, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { useAuth } from '@/lib/useAuth'; // Adjust path
@@ -30,6 +30,13 @@ export default function RecruiterDashboard() {
       gradient: "from-purple-500 to-indigo-600"
     },
     {
+      title: "View Job Listings",
+      description: "Manage and review all your active and archived job postings in one centralized location.",
+      icon: Briefcase,
+      href: "/company/listing",
+      gradient: "from-green-500 to-emerald-600"
+    },
+    {
       title: "Match Report",
       description: "View comprehensive candidate matching reports with detailed skill alignment and compatibility scores.",
       icon: PieChart,
@@ -49,7 +56,7 @@ export default function RecruiterDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
       <Header />
       <main className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-8 animate-fade-in-up">
             Welcome to Your Recruitment Hub
           </h1>
@@ -57,19 +64,19 @@ export default function RecruiterDashboard() {
             Streamline your hiring process with AI-powered candidate matching and efficient communication tools.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-fade-in-up animation-delay-400">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up animation-delay-400">
             {features.map((feature, index) => (
               <Link
                 key={feature.title}
                 href={feature.href}
-                className="group relative overflow-hidden rounded-2xl p-8 transition-all duration-300 hover:scale-105"
+                className="group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:scale-105"
               >
                 <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-90 transition-opacity group-hover:opacity-100`} />
-                <div className="relative z-10 flex flex-col h-full min-h-[320px]">
-                  <feature.icon className="h-12 w-12 text-white mb-6" />
-                  <h2 className="text-2xl font-bold text-white mb-4">{feature.title}</h2>
-                  <p className="text-white/90 flex-grow">{feature.description}</p>
-                  <div className="mt-6 flex items-center text-white">
+                <div className="relative z-10 flex flex-col h-full min-h-[260px]">
+                  <feature.icon className="h-10 w-10 text-white mb-4" />
+                  <h2 className="text-xl font-bold text-white mb-3">{feature.title}</h2>
+                  <p className="text-white/90 text-sm flex-grow">{feature.description}</p>
+                  <div className="mt-4 flex items-center text-white">
                     <span className="text-sm font-semibold">Get Started</span>
                     <svg
                       className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"

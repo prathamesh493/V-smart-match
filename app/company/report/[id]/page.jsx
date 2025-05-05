@@ -1,16 +1,17 @@
 // This is the server component
-import { Suspense } from 'react'
-import { Code, UserCircle, Download, CheckCircle, AlertCircle } from "lucide-react"
+import { Suspense } from "react"
+import { Code, UserCircle, Download, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import Header from "@/components/Header"
 import { Badge } from "@/components/ui/badge"
-import ClientCategoryScoresCard from './ClientCategoryScoresCard'
+import ClientCategoryScoresCard from "./ClientCategoryScoresCard"
+import Link from "next/link"
 
 async function getMatchReport(id) {
   try {
-    const response = await fetch(`http://mj.local:8000/api/match/${id}`)
+    const response = await fetch(`http://localhost:8000/api/match/${id}`, { cache: "no-store" })
     if (!response.ok) {
       throw new Error("Failed to fetch report data")
     }
@@ -22,13 +23,56 @@ async function getMatchReport(id) {
 }
 
 export default async function CompanyCandidateReport({ params }) {
-  const reportData = await getMatchReport(params.id)
-  console.log("Report Data:", reportData)
+  let reportData
+  let error = null
+
+  try {
+    reportData = await getMatchReport(params.id)
+  } catch (err) {
+    error = err.message || "Failed to load candidate report"
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="mb-8">
+            <Link href="/company/listing" className="text-white/80 hover:text-white flex items-center">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Job Listings
+            </Link>
+          </div>
+
+          <div className="bg-red-500/20 backdrop-blur-sm rounded-lg p-6 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-white" />
+            <p className="text-white text-lg">{error}</p>
+            <Link
+              href="/company/listing"
+              className="mt-4 px-6 py-2 bg-white text-purple-700 rounded-lg font-medium inline-block"
+            >
+              Return to Listings
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">
       <Header />
       <main className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <Link
+            href={`/company/match-report?jobId=${reportData.jobDescriptionId}`}
+            className="text-white/80 hover:text-white flex items-center"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Matches
+          </Link>
+        </div>
+
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white">Candidate Match Report</h1>

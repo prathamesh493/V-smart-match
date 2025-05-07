@@ -4,14 +4,118 @@ import os
 import uuid
 from datetime import datetime
 import tempfile
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from ..schemas.job_description import JobDescriptionResponse, JobDescriptionUploadRequest
 from ..schemas.resume import ErrorResponse
 from services.job_description import extract_job_description_data
 from services.job_firestore import store_job_description_data, get_job_description_data, get_user_job_descriptions, delete_job_description
+from services.firebase import query_documents, get_document
+from services.matcher import get_match
 
 router = APIRouter(prefix="/job-description", tags=["job_description"])
 
+async def generate_matches_for_job(job_id: str, job_content: str):
+    """
+    Background task to generate matches for all candidates against a new job description.
+    
+    Args:
+        job_id: The ID of the job description
+        job_content: The content of the job description
+    """
+    try:
+        print(f"Starting background matching for job ID: {job_id}")
+        
+        # Get all candidates from the candidates collection instead of resumes
+        candidates = await query_documents("candidates", limit=100)
+        
+        # Prepare candidate data for matching
+        candidate_data = []
+        for candidate in candidates:
+            candidate_id = candidate.get("userId")  # Using userId from candidates collection
+            
+            if not candidate_id:
+                continue
+                
+            # Check if candidate has a resume
+            has_resume = candidate.get("has_resume", False)
+            if not has_resume:
+                print(f"Skipping candidate {candidate_id} with no resume")
+                continue
+                
+            # Get resume content using latest_resume_id
+            resume_id = candidate.get("latest_resume_id")
+            if not resume_id:
+                print(f"Skipping candidate {candidate_id} with no resume ID")
+                continue
+                
+            # Fetch resume content from resumes collection
+            resume_doc = await get_document("resumes", resume_id)
+            if not resume_doc or "extracted_content" not in resume_doc:
+                print(f"Could not find resume content for candidate {candidate_id}")
+                continue
+                
+            resume_content = resume_doc.get("extracted_content", "")
+            
+            # Check GitHub profile status
+            has_github_profile = candidate.get("has_github_profile", False)
+            github_data = None
+            if has_github_profile:
+                github_username = candidate.get("github_username")
+                if github_username:
+                    github_profile = await get_document("github_profiles", candidate_id)
+                    if github_profile:
+                        github_data = github_profile
+            
+            # Check LeetCode profile status
+            has_leetcode_profile = candidate.get("has_leetcode_profile", False)
+            leetcode_data = None
+            if has_leetcode_profile:
+                leetcode_username = candidate.get("leetcode_username")
+                if leetcode_username:
+                    leetcode_profile = await get_document("leetcode_profiles", candidate_id)
+                    if leetcode_profile:
+                        leetcode_data = leetcode_profile
+            
+            candidate_data.append({
+                "id": candidate_id,
+                "content": resume_content,
+                "github_data": github_data,
+                "leetcode_data": leetcode_data,
+                "full_name": candidate.get("fullName"),
+                "email": candidate.get("email")
+            })
+        
+        print(f"Found {len(candidate_data)} candidates for matching")
+        
+        # Generate matches for each candidate
+        for candidate in candidate_data:
+            try:
+                match_result = await get_match(
+                    candidate["id"],
+                    job_id,
+                    candidate["content"],
+                    job_content,
+                    candidate.get("github_data"),
+                    candidate.get("leetcode_data")
+                )
+                
+                # Add additional candidate info to match result
+                match_result["candidate_name"] = candidate.get("full_name", "")
+                match_result["candidate_email"] = candidate.get("email", "")
+                
+                # Store the match in Firestore
+                from services.firebase import add_document
+                await add_document("matches", match_result["matchId"], match_result)
+                print(f"Created match {match_result['matchId']} between candidate {candidate['id']} and job {job_id}")
+                
+            except Exception as e:
+                print(f"Error generating match for candidate {candidate['id']}: {str(e)}")
+                continue
+                
+        print(f"Completed background matching for job ID: {job_id}")
+        
+    except Exception as e:
+        print(f"Error in background matching task: {str(e)}")
 @router.post(
     "/upload",
     response_model=JobDescriptionResponse,
@@ -30,6 +134,7 @@ async def upload_job_description(
     - Extracts text using zerox
     - Processes the text with Gemini AI
     - Stores structured data in Firestore under the provided user_id
+    - Generates matches for all candidates in the system
     """
     # Validate file is PDF
     if not file.filename.endswith('.pdf'):
@@ -66,6 +171,9 @@ async def upload_job_description(
 
         # Schedule file cleanup in background after processing
         background_tasks.add_task(cleanup_file, file_path)
+        
+        # Schedule background task to generate matches for all candidates
+        background_tasks.add_task(generate_matches_for_job, doc_id, markdown_content)
 
         # Get metadata for response if available
         metadata = parsed_data.get("metadata", {})

@@ -1,8 +1,8 @@
 from typing import Dict, List, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from pydantic import BaseModel
 
-# Import Firebase utilities (assuming these are implemented elsewhere)
+# Import Firebase utilities
 from services.firebase import get_document, update_document, add_document, query_documents
 from services.matcher import get_match, get_matches_for_resume, get_matches_for_job
 
@@ -79,12 +79,26 @@ async def create_match(match_req: MatchRequest):
         if not resume_content or not job_content:
             raise HTTPException(status_code=400, detail="Missing content in resume or job description")
         
+        # Get GitHub data if available
+        github_data = None
+        github_profile = await get_document("github_profiles", match_req.candidate_id)
+        if github_profile:
+            github_data = github_profile
+        
+        # Get LeetCode data if available
+        leetcode_data = None
+        leetcode_profile = await get_document("leetcode_profiles", match_req.candidate_id)
+        if leetcode_profile:
+            leetcode_data = leetcode_profile
+        
         # Generate match analysis
         match_result = await get_match(
             match_req.candidate_id,
             match_req.job_description_id,
             resume_content,
-            job_content
+            job_content,
+            github_data,
+            leetcode_data
         )
         
         # Store the match result in Firebase
@@ -136,7 +150,7 @@ async def get_matches_by_job(
     return matches
 
 @router.post("/bulk", response_model=List[Dict[str, Any]])
-async def create_bulk_matches(bulk_req: MatchBulkRequest):
+async def create_bulk_matches(bulk_req: MatchBulkRequest, background_tasks: BackgroundTasks):
     """
     Create multiple matches between candidates and job descriptions.
     
@@ -145,22 +159,43 @@ async def create_bulk_matches(bulk_req: MatchBulkRequest):
     - Matching one job description against multiple candidates
     - Creating a matching matrix between multiple candidates and job descriptions
     """
-    results = []
+    # Start the bulk matching process in the background
+    background_tasks.add_task(process_bulk_matches, bulk_req.candidate_ids, bulk_req.job_description_ids)
     
+    return {"message": f"Bulk matching started for {len(bulk_req.candidate_ids)} candidates and {len(bulk_req.job_description_ids)} job descriptions"}
+
+async def process_bulk_matches(candidate_ids: List[str], job_description_ids: List[str]):
+    """
+    Background task to process bulk matches.
+    """
     try:
         # Retrieve all candidates
         candidates = []
-        for candidate_id in bulk_req.candidate_ids:
+        for candidate_id in candidate_ids:
             resume_doc = await get_document("resumes", candidate_id)
             if resume_doc and "extracted_content" in resume_doc:
+                # Get GitHub data if available
+                github_data = None
+                github_profile = await get_document("github_profiles", candidate_id)
+                if github_profile:
+                    github_data = github_profile
+                
+                # Get LeetCode data if available
+                leetcode_data = None
+                leetcode_profile = await get_document("leetcode_profiles", candidate_id)
+                if leetcode_profile:
+                    leetcode_data = leetcode_profile
+                
                 candidates.append({
                     "id": candidate_id,
-                    "content": resume_doc["extracted_content"]
+                    "content": resume_doc["extracted_content"],
+                    "github_data": github_data,
+                    "leetcode_data": leetcode_data
                 })
         
         # Retrieve all job descriptions
         job_descriptions = []
-        for jd_id in bulk_req.job_description_ids:
+        for jd_id in job_description_ids:
             job_doc = await get_document("job_descriptions", jd_id)
             if job_doc and "extracted_content" in job_doc:
                 job_descriptions.append({
@@ -171,23 +206,26 @@ async def create_bulk_matches(bulk_req: MatchBulkRequest):
         # Create a matrix of matches
         for candidate in candidates:
             for job in job_descriptions:
-                # Generate match analysis
-                match_result = await get_match(
-                    candidate["id"],
-                    job["id"],
-                    candidate["content"],
-                    job["content"]
-                )
-                
-                # Store match in database
-                await add_document("matches", match_result["matchId"], match_result)
-                
-                results.append(match_result)
-        
-        return results
+                try:
+                    # Generate match analysis
+                    match_result = await get_match(
+                        candidate["id"],
+                        job["id"],
+                        candidate["content"],
+                        job["content"],
+                        candidate.get("github_data"),
+                        candidate.get("leetcode_data")
+                    )
+                    
+                    # Store match in database
+                    await add_document("matches", match_result["matchId"], match_result)
+                    print(f"Created match {match_result['matchId']} between candidate {candidate['id']} and job {job['id']}")
+                except Exception as e:
+                    print(f"Error creating match between candidate {candidate['id']} and job {job['id']}: {str(e)}")
+                    continue
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing bulk matches: {str(e)}")
+        print(f"Error processing bulk matches: {str(e)}")
 
 @router.get("/search", response_model=List[Dict[str, Any]])
 async def search_matches(

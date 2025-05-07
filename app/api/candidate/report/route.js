@@ -1,6 +1,6 @@
 // app/api/candidate/report/route.js
 import { db } from '@/firebase/config';
-import { doc, getDoc, collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import { NextResponse } from 'next/server';
 
 export async function GET(request) {
@@ -21,7 +21,7 @@ export async function GET(request) {
       });
     }
     
-    // Check if user profile is completed
+    // Check if user profile exists
     const userDocRef = doc(db, "candidates", uid);
     const userSnapshot = await getDoc(userDocRef);
     
@@ -39,93 +39,171 @@ export async function GET(request) {
       });
     }
     
-    // Fetch data from different sources in Firestore
+    // Get the user data
     const userData = userSnapshot.data();
     
-    // Get resume data - Use simple query first to avoid index requirements
-    let resumeData = {};
-    try {
-      console.log(`Attempting to fetch resume for user: ${uid}`);
-      
-      // Use a simple query without ordering to avoid index requirements
-      const simpleQuery = query(
-        collection(db, "resumes"),
-        where("user_id", "==", uid),
-        limit(1)
-      );
-      let resumeSnapshot = await getDocs(simpleQuery);
-      
-      if (!resumeSnapshot.empty) {
-        console.log("Found resume through simple query");
-        const resumeDoc = resumeSnapshot.docs[0];
-        resumeData = resumeDoc.data();
-      } else {
-        console.log("No resume found by user_id query, trying direct document lookup");
-        const directResumeRef = doc(db, "resumes", uid);
-        const directSnapshot = await getDoc(directResumeRef);
-        
-        if (directSnapshot.exists()) {
-          console.log("Found resume through direct document lookup");
-          resumeData = directSnapshot.data();
-        } else {
-          console.log("No resume found for this user");
-        }
-      }
-      
-      console.log(`Resume data fetched:`, Object.keys(resumeData).length > 0 ? 
-        `Fields present: ${Object.keys(resumeData).join(', ')}` : 
-        "No resume data found");
-      
-      // Check if extracted_content exists and is a string
-      if (resumeData && resumeData.extracted_content && typeof resumeData.extracted_content === 'string') {
-        console.log(`Resume content found, length: ${resumeData.extracted_content.length} chars`);
-        // Process the markdown content into structured data
-        try {
-          resumeData = processResumeMarkdown(resumeData.extracted_content, resumeData);
-        } catch (processingError) {
-          console.error('Error processing resume markdown:', processingError);
-          // Continue with the original resume data if processing fails
-        }
-      } else {
-        console.log('No valid extracted_content found in resume data');
-      }
-    } catch (resumeError) {
-      console.error('Error fetching resume data:', resumeError);
-      // Continue with empty resume data
-    }
-    
-    // Get GitHub profile data
-    const githubDocRef = doc(db, "github_profiles", uid);
-    const githubSnapshot = await getDoc(githubDocRef);
-    const githubData = githubSnapshot.exists() ? githubSnapshot.data() : {};
-    
-    // Get LeetCode profile data
-    const leetcodeDocRef = doc(db, "leetcode_profiles", uid);
-    const leetcodeSnapshot = await getDoc(leetcodeDocRef);
-    const leetcodeData = leetcodeSnapshot.exists() ? leetcodeSnapshot.data() : {};
-    
-    // Get skill assessments if any
-    const skillAssessmentsRef = collection(db, "candidates", uid, "skill_assessments");
-    const skillAssessmentsSnapshot = await getDocs(skillAssessmentsRef);
-    const skillAssessments = [];
-    skillAssessmentsSnapshot.forEach(doc => {
-      skillAssessments.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-    
-    // Aggregate all data
+    // Initialize the report data with the user profile
     const reportData = {
       profile: userData,
-      resume: resumeData,
-      github: githubData,
-      leetcode: leetcodeData,
-      skillAssessments: skillAssessments,
+      resume: {},
+      github: {},
+      leetcode: {},
+      skillAssessments: [],
       profileStatus: 'complete'
     };
     
-    return new Response(JSON.stringify(reportData), {
+    // Fetch all related data in parallel to improve performance
+    const fetchPromises = [];
+    
+    // Get resume data if the user has a resume
+    if (userData.has_resume) {
+      fetchPromises.push(
+        (async () => {
+          try {
+            // If we have a latest_resume_id, use that directly
+            if (userData.latest_resume_id) {
+              const resumeDocRef = doc(db, "resumes", userData.latest_resume_id);
+              const resumeSnapshot = await getDoc(resumeDocRef);
+              if (resumeSnapshot.exists()) {
+                reportData.resume = resumeSnapshot.data();
+                return;
+              }
+            }
+            
+            // Fallback to query if direct lookup fails
+            const resumeQuery = query(
+              collection(db, "resumes"),
+              where("user_id", "==", uid),
+              limit(1)
+            );
+            const resumeSnapshot = await getDocs(resumeQuery);
+            
+            if (!resumeSnapshot.empty) {
+              reportData.resume = resumeSnapshot.docs[0].data();
+            }
+          } catch (error) {
+            console.error('Error fetching resume data:', error);
+          }
+        })()
+      );
+    }
+    
+    // Get GitHub profile data if the user has a GitHub profile
+    if (userData.has_github_profile) {
+      fetchPromises.push(
+        (async () => {
+          try {
+            let githubData = null;
+            
+            // Try fetching by github_profile_id first if available
+            if (userData.github_profile_id) {
+              const githubDocRef = doc(db, "github_profiles", userData.github_profile_id);
+              const githubSnapshot = await getDoc(githubDocRef);
+              if (githubSnapshot.exists()) {
+                githubData = githubSnapshot.data();
+              }
+            }
+            
+            // If not found by ID and username is available, try by username
+            if (!githubData && userData.github_username) {
+              const githubUsernameRef = doc(db, "github_profiles", userData.github_username);
+              const githubUsernameSnapshot = await getDoc(githubUsernameRef);
+              if (githubUsernameSnapshot.exists()) {
+                githubData = githubUsernameSnapshot.data();
+              }
+            }
+            
+            // Fallback to user ID lookup if still not found
+            if (!githubData) {
+              const githubDocRef = doc(db, "github_profiles", uid);
+              const githubSnapshot = await getDoc(githubDocRef);
+              if (githubSnapshot.exists()) {
+                githubData = githubSnapshot.data();
+              }
+            }
+            
+            // If we found data, ensure it's properly serialized
+            if (githubData) {
+              reportData.github = JSON.parse(JSON.stringify(githubData));
+            }
+          } catch (error) {
+            console.error('Error fetching GitHub profile data:', error);
+          }
+        })()
+      );
+    }
+    
+    // Get LeetCode profile data if the user has a LeetCode profile
+    if (userData.has_leetcode_profile && userData.leetcode_username) {
+      fetchPromises.push(
+        (async () => {
+          try {
+            // Use leetcode_username for fetching data, as per the requirement
+            const leetcodeDocRef = doc(db, "leetcode_profiles", userData.leetcode_username);
+            const leetcodeSnapshot = await getDoc(leetcodeDocRef);
+            
+            if (leetcodeSnapshot.exists()) {
+              // Get the raw data
+              const leetcodeData = leetcodeSnapshot.data();
+              
+              // Ensure all nested objects are properly serialized (not [Object])
+              reportData.leetcode = JSON.parse(JSON.stringify(leetcodeData));
+            } else {
+              console.log(`No LeetCode profile found for username: ${userData.leetcode_username}`);
+              // Fallback to user ID if username fetch fails
+              const fallbackDocRef = doc(db, "leetcode_profiles", uid);
+              const fallbackSnapshot = await getDoc(fallbackDocRef);
+              
+              if (fallbackSnapshot.exists()) {
+                const leetcodeData = fallbackSnapshot.data();
+                reportData.leetcode = JSON.parse(JSON.stringify(leetcodeData));
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching LeetCode profile data:', error);
+          }
+        })()
+      );
+    }
+    
+    // Get skill assessments
+    fetchPromises.push(
+      (async () => {
+        try {
+          const skillAssessmentsRef = collection(db, "candidates", uid, "skill_assessments");
+          const skillAssessmentsSnapshot = await getDocs(skillAssessmentsRef);
+          
+          skillAssessmentsSnapshot.forEach(doc => {
+            reportData.skillAssessments.push({
+              id: doc.id,
+              ...doc.data()
+            });
+          });
+        } catch (error) {
+          console.error('Error fetching skill assessments:', error);
+        }
+      })()
+    );
+    
+    // Wait for all data fetching to complete
+    await Promise.all(fetchPromises);
+    
+    // Convert Firestore Timestamps and ensure deep objects are properly serialized
+    const serializedData = JSON.parse(JSON.stringify(reportData, (key, value) => {
+      // Handle Firestore Timestamps
+      if (value && typeof value === 'object' && value.seconds !== undefined && value.nanoseconds !== undefined) {
+        return {
+          _seconds: value.seconds,
+          _nanoseconds: value.nanoseconds,
+          _isTimestamp: true
+        };
+      }
+      return value;
+    }));
+    
+    console.log('Serialized report data:', serializedData);
+    
+    return new Response(JSON.stringify(serializedData), {
       headers: {
         'Content-Type': 'application/json',
       },
@@ -135,7 +213,10 @@ export async function GET(request) {
     console.error('Error fetching candidate report:', error);
     
     // Return error response
-    return new Response(JSON.stringify({ error: 'Failed to fetch report data' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Failed to fetch report data',
+      message: error.message 
+    }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
@@ -148,117 +229,11 @@ export async function GET(request) {
 function isProfileComplete(profileData) {
   if (!profileData) return false;
   
-  // Define required fields for a complete profile
+  // Define minimum required fields for a complete profile
   const requiredFields = [
     'fullName', 
     'email'
   ];
   
   return requiredFields.every(field => !!profileData[field]);
-}
-
-// Helper function to process resume markdown content
-function processResumeMarkdown(markdown, resumeData) {
-  if (!markdown) return resumeData;
-  
-  const result = { 
-    ...resumeData,
-    skills: [],
-    experience: [],
-    education: []
-  };
-
-  try {
-    // Extract Skills section
-    const skillsMatch = markdown.match(/## Skills\n([\s\S]*?)(?=##|$)/);
-    if (skillsMatch && skillsMatch[1]) {
-      const skillsText = skillsMatch[1].trim();
-      
-      // Extract programming languages
-      const programmingMatch = skillsText.match(/\*\*Programming Languages:\*\* (.*?)(?=\n|$)/);
-      if (programmingMatch && programmingMatch[1]) {
-        result.skills.push(...programmingMatch[1].split(', '));
-      }
-      
-      // Extract frameworks
-      const frameworksMatch = skillsText.match(/\*\*Frameworks:\*\* (.*?)(?=\n|$)/);
-      if (frameworksMatch && frameworksMatch[1]) {
-        result.skills.push(...frameworksMatch[1].split(', '));
-      }
-      
-      // Extract databases
-      const dbMatch = skillsText.match(/\*\*Databases:\*\* (.*?)(?=\n|$)/);
-      if (dbMatch && dbMatch[1]) {
-        result.skills.push(...dbMatch[1].split(', '));
-      }
-      
-      // Extract tools
-      const toolsMatch = skillsText.match(/\*\*Tools:\*\* (.*?)(?=\n|$)/);
-      if (toolsMatch && toolsMatch[1]) {
-        result.skills.push(...toolsMatch[1].split(', '));
-      }
-    }
-
-    // Extract Experience section
-    const experienceMatch = markdown.match(/## Experience\n([\s\S]*?)(?=##|$)/);
-    if (experienceMatch && experienceMatch[1]) {
-      const experienceText = experienceMatch[1].trim();
-      const experienceEntries = experienceText.split(/\*\*/g).filter(Boolean);
-
-      for (let i = 0; i < experienceEntries.length; i += 2) {
-        if (experienceEntries[i] && experienceEntries[i+1]) {
-          const titleParts = experienceEntries[i].trim().split(',');
-          const title = titleParts[0].trim();
-          const company = titleParts[1] ? titleParts[1].trim() : '';
-          
-          const descriptionParts = experienceEntries[i+1].split('\n');
-          const duration = descriptionParts[0].trim();
-          
-          // Join the rest of the lines for description, remove bullet points
-          const description = descriptionParts.slice(1)
-            .join('\n')
-            .replace(/^\*/gm, '')
-            .trim();
-          
-          result.experience.push({
-            title,
-            company,
-            duration,
-            description
-          });
-        }
-      }
-    }
-
-    // Extract Education section
-    const educationMatch = markdown.match(/## Education\n([\s\S]*?)(?=##|$)/);
-    if (educationMatch && educationMatch[1]) {
-      const educationText = educationMatch[1].trim();
-      const educationEntries = educationText.split(/\*\*/g).filter(Boolean);
-
-      for (let i = 0; i < educationEntries.length; i += 2) {
-        if (educationEntries[i] && educationEntries[i+1]) {
-          const degree = educationEntries[i].trim();
-          const detailsText = educationEntries[i+1].trim();
-          
-          const institutionMatch = detailsText.match(/(.*?)(?=\d|$)/);
-          const institution = institutionMatch ? institutionMatch[1].trim() : '';
-          
-          const yearMatch = detailsText.match(/(\d{4}\s*-\s*\d{4}|\d{4})/);
-          const year = yearMatch ? yearMatch[1].trim() : '';
-          
-          result.education.push({
-            degree,
-            institution,
-            year
-          });
-        }
-      }
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Error processing resume markdown:', error);
-    return resumeData;
-  }
 }

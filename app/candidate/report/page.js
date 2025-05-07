@@ -1,315 +1,478 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/useAuth"
+import { FileText, Github, Code, GraduationCap, Award, Briefcase, ExternalLink, User } from "lucide-react"
+import Header from "@/components/Header"
+import Link from "next/link"
 
-const CandidateReport = () => {
-  const [reportData, setReportData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const router = useRouter();
-  const { currentUser } = useAuth();
+export default function CandidateReport() {
+  const [reportData, setReportData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
+    // Redirect if not authenticated
+    if (!authLoading && !user) {
+      router.push("/signin")
+      return
+    }
+
     const fetchReport = async () => {
       try {
-        // Use a simple query parameter approach instead of token-based auth
-        const response = await fetch(`/api/candidate/report?uid=${currentUser.uid}`);
-        const data = await response.json();
+        // Use a simple query parameter approach for authentication
+        const response = await fetch(`/api/candidate/report?uid=${user.uid}`)
+        const data = await response.json()
 
         if (data.error && data.redirectTo) {
-          router.push(data.redirectTo);
-          return;
+          router.push(data.redirectTo)
+          return
         }
 
-        setReportData(data);
+        setReportData(data)
       } catch (err) {
-        setError('Failed to fetch report data');
-        console.error(err);
+        setError("Failed to fetch report data")
+        console.error(err)
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-
-    if (currentUser) {
-      fetchReport();
-    } else {
-      setLoading(false);  // Make sure to set loading to false even if there's no user
     }
-  }, [currentUser, router]);
 
-  if (loading) {
+    if (user) {
+      fetchReport()
+    }
+  }, [user, authLoading, router])
+
+  if (loading || authLoading) {
     return (
-      <div className="container mx-auto p-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
+        <Header />
+        <div className="container mx-auto px-4 py-16">
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+          </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto p-8">
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md">
-          <p>{error}</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
+        <Header />
+        <div className="container mx-auto px-4 py-16">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-8 text-white">
+            <h2 className="text-2xl font-bold mb-4">Error</h2>
+            <p>{error}</p>
+            <button
+              onClick={() => router.push("/candidate/profile")}
+              className="mt-4 bg-white text-[#c6269e] px-4 py-2 rounded-lg font-medium"
+            >
+              Complete Your Profile
+            </button>
+          </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (!reportData) {
-    return null;
+    return null
   }
 
-  const { profile, resume, github, leetcode, skillAssessments } = reportData;
+  const { profile, resume, github, leetcode } = reportData
+
+  // Extract skills from resume
+  const resumeSkills = resume?.skills || []
+
+  // Extract education from resume
+  const education = resume?.education || []
+
+  // Extract experience from resume
+  const experience = resume?.experience || []
+
+  // Extract GitHub languages
+  const githubLanguages = github?.insights_data?.top_languages || {}
+  const languageEntries = Object.entries(githubLanguages)
+    .map(([name, bytes]) => ({
+      name,
+      percentage: Math.round((bytes / Object.values(githubLanguages).reduce((a, b) => a + b, 0)) * 100),
+    }))
+    .sort((a, b) => b.percentage - a.percentage)
+
+  // Extract GitHub projects
+  const githubProjects = github?.insights_data?.personal_projects || []
+
+  // Extract LeetCode stats
+  const leetcodeStats =
+    leetcode?.profile_data?.userProblemsSolved?.matchedUser?.submitStatsGlobal?.acSubmissionNum || []
+  const leetcodeSkillStats = leetcode?.profile_data?.skillStats?.matchedUser?.tagProblemCounts || {}
 
   return (
-      <div className="container mx-auto p-8">
-        <h1 className="text-3xl font-bold mb-8">Your Profile Report</h1>
-        
+    <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
+      <Header />
+      <main className="container mx-auto px-4 py-16">
+        <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-8 animate-fade-in-up">
+          Your Professional Profile
+        </h1>
+        <p className="text-xl text-white/90 text-center mb-12 animate-fade-in-up animation-delay-200">
+          This comprehensive report showcases your skills, experience, and coding abilities.
+        </p>
+
         {/* Basic Profile */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold mb-4">Personal Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p><span className="font-medium">Name:</span> {profile?.fullName}</p>
-              <p><span className="font-medium">Email:</span> {profile?.email}</p>
-              <p><span className="font-medium">Phone:</span> {profile?.phone || 'Not specified'}</p>
-            </div>
-            <div>
-              <p><span className="font-medium">Location:</span> {profile?.location || 'Not specified'}</p>
-              <p><span className="font-medium">Current Position:</span> {profile?.currentPosition || 'Not specified'}</p>
-              <p><span className="font-medium">Years of Experience:</span> {profile?.yearsOfExperience || 'Not specified'}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+          <div className="lg:col-span-1">
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white h-full">
+              <div className="flex items-center mb-6">
+                <div className="bg-white/20 rounded-full p-3 mr-4">
+                  <User className="h-8 w-8" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">{profile?.fullName || "Your Name"}</h2>
+                  <p className="text-white/80">{profile?.email || "email@example.com"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {profile?.github_username && (
+                  <div className="flex items-center">
+                    <Github className="h-5 w-5 mr-3 text-white/70" />
+                    <span>{profile.github_username}</span>
+                  </div>
+                )}
+
+                {profile?.leetcode_username && (
+                  <div className="flex items-center">
+                    <Code className="h-5 w-5 mr-3 text-white/70" />
+                    <span>{profile.leetcode_username}</span>
+                  </div>
+                )}
+
+                {resume?.metadata?.file_name && (
+                  <div className="flex items-center">
+                    <FileText className="h-5 w-5 mr-3 text-white/70" />
+                    <span>Resume Uploaded</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </section>
 
-        {/* Resume Section */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold mb-4">Resume Information</h2>
-          
-          {!resume || Object.keys(resume).length === 0 ? (
-            <p className="text-gray-500 italic">No resume information available</p>
-          ) : (
-            <div className="space-y-4">
-              {/* Skills */}
-              <div>
-                <h3 className="text-xl font-medium mb-2">Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                  {resume.skills?.map((skill, index) => (
-                    <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                      {skill}
-                    </span>
-                  )) || <p className="text-gray-500 italic">No skills listed</p>}
-                </div>
-              </div>
-              
-              {/* Experience */}
-              <div>
-                <h3 className="text-xl font-medium mb-2">Experience</h3>
-                {resume.experience?.map((exp, index) => (
-                  <div key={index} className="mb-3 pb-3 border-b border-gray-100 last:border-0">
-                    <p className="font-medium">{exp.title}</p>
-                    <p className="text-sm text-gray-600">{exp.company} • {exp.duration || 'Duration not specified'}</p>
-                    <p className="text-sm mt-1">{exp.description || 'No description provided'}</p>
-                  </div>
-                )) || <p className="text-gray-500 italic">No experience listed</p>}
-              </div>
-              
-              {/* Education */}
-              <div>
-                <h3 className="text-xl font-medium mb-2">Education</h3>
-                {resume.education?.map((edu, index) => (
-                  <div key={index} className="mb-3 pb-3 border-b border-gray-100 last:border-0">
-                    <p className="font-medium">{edu.degree}</p>
-                    <p className="text-sm text-gray-600">{edu.institution} • {edu.year || 'Year not specified'}</p>
-                  </div>
-                )) || <p className="text-gray-500 italic">No education listed</p>}
-              </div>
-            </div>
-          )}
-        </section>
-        
-        {/* GitHub Profile */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold mb-4">GitHub Profile</h2>
-          
-          {!github || Object.keys(github).length === 0 ? (
-            <p className="text-gray-500 italic">No GitHub profile information available</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                {github.avatar_url && (
-                  <img src={github.avatar_url} alt="GitHub Avatar" className="w-16 h-16 rounded-full" />
+          <div className="lg:col-span-2">
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white h-full">
+              <h2 className="text-2xl font-bold mb-4 flex items-center">
+                <Award className="h-6 w-6 mr-2" />
+                Skills & Expertise
+              </h2>
+
+              <div className="flex flex-wrap gap-2">
+                {resumeSkills.map((skill, index) => (
+                  <span key={index} className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
+                    {skill}
+                  </span>
+                ))}
+
+                {resumeSkills.length === 0 && (
+                  <p className="text-white/60 italic">
+                    No skills listed. Update your resume to showcase your abilities.
+                  </p>
                 )}
-                <div>
-                  <h3 className="font-medium text-lg">{github.name || github.login}</h3>
-                  {github.login && <p className="text-gray-600">@{github.login}</p>}
-                  {github.bio && <p className="mt-1">{github.bio}</p>}
-                </div>
               </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{github.public_repos || 0}</p>
-                  <p className="text-sm text-gray-600">Repositories</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{github.followers || 0}</p>
-                  <p className="text-sm text-gray-600">Followers</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{github.following || 0}</p>
-                  <p className="text-sm text-gray-600">Following</p>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{github.contributions || 0}</p>
-                  <p className="text-sm text-gray-600">Contributions</p>
-                </div>
-              </div>
-              
-              {/* Top Languages */}
-              {github.languages && github.languages.length > 0 && (
-                <div>
-                  <h3 className="text-xl font-medium mb-2">Top Languages</h3>
+
+              {github?.insights_data?.tech_preferences?.from_readme?.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-2">Technologies (from GitHub)</h3>
                   <div className="flex flex-wrap gap-2">
-                    {github.languages.map((lang, index) => (
-                      <span key={index} className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
-                        {lang.name} ({lang.percentage}%)
+                    {github.insights_data.tech_preferences.from_readme.map((tech, index) => (
+                      <span key={index} className="bg-purple-500/30 px-3 py-1 rounded-full text-sm font-medium">
+                        {tech}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-              
-              {/* Top Repositories */}
-              {github.top_repos && github.top_repos.length > 0 && (
-                <div>
-                  <h3 className="text-xl font-medium mb-2">Top Repositories</h3>
-                  <div className="space-y-3">
-                    {github.top_repos.map((repo, index) => (
-                      <div key={index} className="border border-gray-200 rounded-md p-3">
-                        <p className="font-medium">{repo.name}</p>
-                        <p className="text-sm text-gray-600 mt-1">{repo.description || 'No description'}</p>
-                        <div className="flex items-center mt-2 text-sm text-gray-500 space-x-4">
-                          <span>⭐ {repo.stars || 0}</span>
-                          <span>🍴 {repo.forks || 0}</span>
-                          <span>{repo.language || 'No language specified'}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-          )}
-        </section>
-        
-        {/* LeetCode Profile */}
-        <section className="mb-8 bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold mb-4">LeetCode Profile</h2>
-          
-          {!leetcode || Object.keys(leetcode).length === 0 ? (
-            <p className="text-gray-500 italic">No LeetCode profile information available</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div>
-                  <h3 className="font-medium text-lg">{leetcode.username || 'LeetCode User'}</h3>
-                  <p className="text-gray-600">Rank: {leetcode.ranking || 'N/A'}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-green-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{leetcode.totalSolved || 0}</p>
-                  <p className="text-sm text-gray-600">Total Solved</p>
-                </div>
-                <div className="bg-yellow-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{leetcode.acceptanceRate || '0%'}</p>
-                  <p className="text-sm text-gray-600">Acceptance Rate</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-md">
-                  <p className="text-2xl font-bold">{leetcode.contributionPoints || 0}</p>
-                  <p className="text-sm text-gray-600">Contribution Points</p>
-                </div>
-              </div>
-              
-              {/* Problem Solving Stats */}
-              <div>
-                <h3 className="text-xl font-medium mb-2">Problem Solving Stats</h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="bg-green-100 p-3 rounded-md">
-                    <p className="text-lg font-bold">{leetcode.easySolved || 0}/{leetcode.easyTotal || 0}</p>
-                    <p className="text-sm text-gray-600">Easy</p>
-                  </div>
-                  <div className="bg-yellow-100 p-3 rounded-md">
-                    <p className="text-lg font-bold">{leetcode.mediumSolved || 0}/{leetcode.mediumTotal || 0}</p>
-                    <p className="text-sm text-gray-600">Medium</p>
-                  </div>
-                  <div className="bg-red-100 p-3 rounded-md">
-                    <p className="text-lg font-bold">{leetcode.hardSolved || 0}/{leetcode.hardTotal || 0}</p>
-                    <p className="text-sm text-gray-600">Hard</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Recent Submissions */}
-              {leetcode.recentSubmissions && leetcode.recentSubmissions.length > 0 && (
-                <div>
-                  <h3 className="text-xl font-medium mb-2">Recent Submissions</h3>
-                  <div className="space-y-2">
-                    {leetcode.recentSubmissions.map((submission, index) => (
-                      <div key={index} className="border border-gray-200 rounded-md p-3">
-                        <p className="font-medium">{submission.title}</p>
-                        <div className="flex justify-between items-center mt-1 text-sm">
-                          <span className={`px-2 py-1 rounded-full ${
-                            submission.difficulty === 'Easy' ? 'bg-green-100 text-green-800' : 
-                            submission.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {submission.difficulty}
-                          </span>
-                          <span className="text-gray-500">{submission.date}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-        
-        {/* Skill Assessments */}
-        {skillAssessments && skillAssessments.length > 0 && (
-          <section className="mb-8 bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-2xl font-semibold mb-4">Skill Assessments</h2>
-            <div className="space-y-4">
-              {skillAssessments.map((assessment, index) => (
-                <div key={index} className="border border-gray-200 rounded-md p-4">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-medium text-lg">{assessment.skillName}</h3>
-                    <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                      Score: {assessment.score}/{assessment.maxScore}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">Completed on: {assessment.completedDate}</p>
-                  {assessment.feedback && (
-                    <div className="mt-3">
-                      <p className="text-sm font-medium">Feedback:</p>
-                      <p className="text-sm mt-1">{assessment.feedback}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
-  );
-};
+          </div>
+        </div>
 
-export default CandidateReport;
+        {/* Resume Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+          {/* Education */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <GraduationCap className="h-6 w-6 mr-2" />
+              Education
+            </h2>
+
+            {education.length > 0 ? (
+              <div className="space-y-6">
+                {education.map((edu, index) => (
+                  <div key={index} className="border-l-2 border-white/30 pl-4">
+                    <h3 className="text-xl font-semibold">{edu.degree}</h3>
+                    <p className="text-white/80">{edu.institution}</p>
+                    <p className="text-white/60 text-sm">{edu.year}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-white/60 italic">
+                No education details found. Update your resume to add your educational background.
+              </p>
+            )}
+          </div>
+
+          {/* Experience */}
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <Briefcase className="h-6 w-6 mr-2" />
+              Experience
+            </h2>
+
+            {experience.length > 0 ? (
+              <div className="space-y-6">
+                {experience.map((exp, index) => (
+                  <div key={index} className="border-l-2 border-white/30 pl-4">
+                    <h3 className="text-xl font-semibold">{exp.title}</h3>
+                    <p className="text-white/80">{exp.company}</p>
+                    <p className="text-white/60 text-sm">{exp.duration}</p>
+                    <p className="mt-2 text-white/80">{exp.description}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-white/60 italic">
+                No experience details found. Update your resume to add your work history.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* GitHub Section */}
+        <div className="mb-12">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <Github className="h-6 w-6 mr-2" />
+              GitHub Profile
+            </h2>
+
+            {github ? (
+              <div className="space-y-8">
+                {/* Languages */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Programming Languages</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {languageEntries.slice(0, 6).map((lang, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-3">
+                        <div className="flex justify-between mb-1">
+                          <span>{lang.name}</span>
+                          <span>{lang.percentage}%</span>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full"
+                            style={{ width: `${lang.percentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Projects */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Top Projects</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {githubProjects.slice(0, 4).map((project, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-4">
+                        <h4 className="font-semibold text-lg mb-1">{project.name}</h4>
+                        <p className="text-white/70 text-sm mb-3 line-clamp-2">
+                          {project.description || "No description available"}
+                        </p>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-white/60">{project.language || "N/A"}</span>
+                          <a
+                            href={project.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm flex items-center text-purple-300 hover:text-white transition-colors"
+                          >
+                            View <ExternalLink className="h-3 w-3 ml-1" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Activity */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Recent Activity</h3>
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-purple-300">
+                          {github.insights_data?.contribution_activity?.last_30_days || 0}
+                        </p>
+                        <p className="text-white/60 text-sm">Commits (Last 30 days)</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-purple-300">
+                          {github.insights_data?.contribution_activity?.last_90_days || 0}
+                        </p>
+                        <p className="text-white/60 text-sm">Commits (Last 90 days)</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Github className="h-16 w-16 mx-auto mb-4 text-white/40" />
+                <p className="text-white/60 mb-4">No GitHub profile connected</p>
+                <Link
+                  href="/candidate/profile"
+                  className="inline-block bg-white/20 hover:bg-white/30 transition-colors px-4 py-2 rounded-lg text-white"
+                >
+                  Connect GitHub
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* LeetCode Section */}
+        <div className="mb-12">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <Code className="h-6 w-6 mr-2" />
+              LeetCode Profile
+            </h2>
+
+            {leetcode ? (
+              <div className="space-y-8">
+                {/* Problem Solving Stats */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Problem Solving</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {leetcodeStats.map((stat, index) => {
+                      if (stat.difficulty === "All") return null
+
+                      let bgColor = "bg-green-500/30"
+                      if (stat.difficulty === "Medium") bgColor = "bg-yellow-500/30"
+                      if (stat.difficulty === "Hard") bgColor = "bg-red-500/30"
+
+                      return (
+                        <div key={index} className={`${bgColor} rounded-lg p-4 text-center`}>
+                          <h4 className="font-medium mb-2">{stat.difficulty}</h4>
+                          <p className="text-3xl font-bold">{stat.count}</p>
+                          <p className="text-white/60 text-sm">Problems Solved</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Skill Tags */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Top Skills</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {leetcodeSkillStats.fundamental && (
+                      <div>
+                        <h4 className="font-medium mb-3 text-purple-300">Fundamental</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {leetcodeSkillStats.fundamental.slice(0, 8).map((skill, index) => (
+                            <span key={index} className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                              {skill.tagName} ({skill.problemsSolved})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {leetcodeSkillStats.intermediate && (
+                      <div>
+                        <h4 className="font-medium mb-3 text-purple-300">Intermediate</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {leetcodeSkillStats.intermediate.slice(0, 8).map((skill, index) => (
+                            <span key={index} className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                              {skill.tagName} ({skill.problemsSolved})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Languages */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Languages Used</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {leetcode.profile_data.languageStats.matchedUser.languageProblemCount.map((lang, index) => (
+                      <div key={index} className="bg-white/5 rounded-lg p-3 text-center">
+                        <p className="font-medium">{lang.languageName}</p>
+                        <p className="text-2xl font-bold text-purple-300">{lang.problemsSolved}</p>
+                        <p className="text-white/60 text-sm">Problems</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Code className="h-16 w-16 mx-auto mb-4 text-white/40" />
+                <p className="text-white/60 mb-4">No LeetCode profile connected</p>
+                <Link
+                  href="/candidate/profile"
+                  className="inline-block bg-white/20 hover:bg-white/30 transition-colors px-4 py-2 rounded-lg text-white"
+                >
+                  Connect LeetCode
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Resume Content */}
+        <div className="mb-12">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 text-white">
+            <h2 className="text-2xl font-bold mb-6 flex items-center">
+              <FileText className="h-6 w-6 mr-2" />
+              Resume Content
+            </h2>
+
+            {resume?.extracted_content ? (
+              <div className="bg-white/5 rounded-lg p-6 whitespace-pre-wrap font-mono text-sm overflow-auto max-h-96">
+                {resume.extracted_content}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-white/40" />
+                <p className="text-white/60 mb-4">No resume content available</p>
+                <Link
+                  href="/candidate/profile"
+                  className="inline-block bg-white/20 hover:bg-white/30 transition-colors px-4 py-2 rounded-lg text-white"
+                >
+                  Upload Resume
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-center">
+          <Link
+            href="/candidate/profile"
+            className="bg-white text-[#c6269e] px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition-colors"
+          >
+            Update Your Profile
+          </Link>
+        </div>
+      </main>
+    </div>
+  )
+}

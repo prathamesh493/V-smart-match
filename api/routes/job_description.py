@@ -1,3 +1,5 @@
+# routes/job_description.py
+
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 import os
@@ -5,180 +7,150 @@ import uuid
 from datetime import datetime
 import tempfile
 from typing import Optional, List, Dict, Any
-from ..schemas.job_description import JobDescriptionResponse, JobDescriptionUploadRequest
+
+# --- MODIFIED IMPORTS ---
+from ..schemas.job_description import JobDescriptionResponse # JobDescriptionUploadRequest is no longer needed here
 from ..schemas.resume import ErrorResponse
 from services.job_description import extract_job_description_data
 from services.job_firestore import store_job_description_data, get_job_description_data, get_user_job_descriptions, delete_job_description
-from services.firebase import query_documents, get_document
+from services.firebase import get_document, add_document
 from services.matcher import get_match
+from services.embedding import get_embedding
+from services.pinecone_service import query_embedding
 
 router = APIRouter(prefix="/job-description", tags=["job_description"])
 
-async def generate_matches_for_job(job_id: str, job_content: str):
+
+# This is our efficient background task function
+async def find_and_generate_matches(job_id: str, job_content: str, num_matches_to_generate: int):
     """
-    Background task to generate matches for all candidates against a new job description.
-    
-    Args:
-        job_id: The ID of the job description
-        job_content: The content of the job description
+    Background task to find top candidates via vector search and generate detailed match reports.
     """
     try:
-        print(f"Starting background matching for job ID: {job_id}")
+        print(f"Starting background matching for job ID: {job_id} for {num_matches_to_generate} candidates.")
         
-        # Get all candidates from the candidates collection instead of resumes
-        candidates = await query_documents("candidates", limit=100)
+        # 1. Generate an embedding for the job description
+        job_embedding = get_embedding(job_content)
+
+        print(f"Job embedding is: {job_embedding}")
+
+        # 2. Query Pinecone: fetch 2x the desired number for resilience
+        top_k_to_fetch = num_matches_to_generate * 2
+        query_results = query_embedding(embedding=job_embedding, top_k=top_k_to_fetch)
+
+        print(f"Query results from Pinecone: {query_results}")
         
-        # Prepare candidate data for matching
-        candidate_data = []
-        for candidate in candidates:
-            candidate_id = candidate.get("userId")  # Using userId from candidates collection
+        pinecone_matches = query_results.get('matches', [])
+        if not pinecone_matches:
+            print(f"No potential candidates found in Pinecone for job {job_id}")
+            return
             
-            if not candidate_id:
-                continue
-                
-            # Check if candidate has a resume
-            has_resume = candidate.get("has_resume", False)
-            if not has_resume:
-                print(f"Skipping candidate {candidate_id} with no resume")
-                continue
-                
-            # Get resume content using latest_resume_id
-            resume_id = candidate.get("latest_resume_id")
-            if not resume_id:
-                print(f"Skipping candidate {candidate_id} with no resume ID")
-                continue
-                
-            # Fetch resume content from resumes collection
-            resume_doc = await get_document("resumes", resume_id)
-            if not resume_doc or "extracted_content" not in resume_doc:
-                print(f"Could not find resume content for candidate {candidate_id}")
-                continue
-                
-            resume_content = resume_doc.get("extracted_content", "")
-            
-            # Check GitHub profile status
-            has_github_profile = candidate.get("has_github_profile", False)
-            github_data = None
-            if has_github_profile:
-                github_username = candidate.get("github_username")
-                if github_username:
-                    github_profile = await get_document("github_profiles", candidate_id)
-                    if github_profile:
-                        github_data = github_profile
-            
-            # Check LeetCode profile status
-            has_leetcode_profile = candidate.get("has_leetcode_profile", False)
-            leetcode_data = None
-            if has_leetcode_profile:
-                leetcode_username = candidate.get("leetcode_username")
-                if leetcode_username:
-                    leetcode_profile = await get_document("leetcode_profiles", candidate_id)
-                    if leetcode_profile:
-                        leetcode_data = leetcode_profile
-            
-            candidate_data.append({
-                "id": candidate_id,
-                "content": resume_content,
-                "github_data": github_data,
-                "leetcode_data": leetcode_data,
-                "full_name": candidate.get("fullName"),
-                "email": candidate.get("email")
-            })
-        
-        print(f"Found {len(candidate_data)} candidates for matching")
-        
-        # Generate matches for each candidate
-        for candidate in candidate_data:
+        resume_ids = [match['id'] for match in pinecone_matches]
+        print(f"Found {len(resume_ids)} potential candidate resumes from Pinecone.")
+
+        # 3. Process each potential candidate and generate a full match report
+        generated_count = 0
+        for resume_id in resume_ids:
+            if generated_count >= num_matches_to_generate:
+                print("Target number of matches generated. Stopping.")
+                break
             try:
+                # Fetch resume and associated candidate details
+                resume_doc = await get_document("resumes", resume_id)
+                if not resume_doc or "user_id" not in resume_doc:
+                    print(f"Skipping resume {resume_id}, missing content or user_id.")
+                    continue
+                
+                candidate_id = resume_doc["user_id"]
+                candidate_doc = await get_document("candidates", candidate_id)
+                if not candidate_doc:
+                    print(f"Could not find candidate profile for ID {candidate_id}")
+                    continue
+                
+                # Fetch optional profile data
+                github_data = await get_document("github_profiles", candidate_id) if candidate_doc.get("has_github_profile") else None
+                leetcode_data = await get_document("leetcode_profiles", candidate_id) if candidate_doc.get("has_leetcode_profile") else None
+
+                # Generate the detailed match report
                 match_result = await get_match(
-                    candidate["id"],
-                    job_id,
-                    candidate["content"],
-                    job_content,
-                    candidate.get("github_data"),
-                    candidate.get("leetcode_data")
+                    candidate_id=candidate_id,
+                    job_description_id=job_id,
+                    resume_content=resume_doc["extracted_content"],
+                    job_description_content=job_content,
+                    github_data=github_data,
+                    leetcode_data=leetcode_data
                 )
                 
-                # Add additional candidate info to match result
-                match_result["candidate_name"] = candidate.get("full_name", "")
-                match_result["candidate_email"] = candidate.get("email", "")
+                match_result["candidate_name"] = candidate_doc.get("fullName", "")
+                match_result["candidate_email"] = candidate_doc.get("email", "")
                 
-                # Store the match in Firestore
-                from services.firebase import add_document
                 await add_document("matches", match_result["matchId"], match_result)
-                print(f"Created match {match_result['matchId']} between candidate {candidate['id']} and job {job_id}")
-                
+                print(f"Created match {match_result['matchId']} for candidate {candidate_id}")
+                generated_count += 1
+
             except Exception as e:
-                print(f"Error generating match for candidate {candidate['id']}: {str(e)}")
+                print(f"Error generating match for resume {resume_id}: {str(e)}")
                 continue
                 
         print(f"Completed background matching for job ID: {job_id}")
-        
+
     except Exception as e:
-        print(f"Error in background matching task: {str(e)}")
+        print(f"FATAL Error in background matching task for job {job_id}: {str(e)}")
+
+# --- CONSOLIDATED SINGLE ENDPOINT ---
 @router.post(
     "/upload",
     response_model=JobDescriptionResponse,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}
 )
-async def upload_job_description(
+async def upload_job_description_and_match(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: str = Form(...),
+    num_matches: int = Form(..., description="The number of top candidate matches to generate."),
     job_title: Optional[str] = Form(None),
     company: Optional[str] = Form(None)
 ):
     """
-    Upload and process a job description PDF file
-    - Saves the uploaded PDF temporarily
-    - Extracts text using zerox
-    - Processes the text with Gemini AI
-    - Stores structured data in Firestore under the provided user_id
-    - Generates matches for all candidates in the system
+    Upload a job description, process it, and trigger the matching process
+    for the specified number of top candidates in a single action.
     """
-    # Validate file is PDF
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-    # Create unique filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid.uuid4())[:8]
     filename = f"job_{user_id}_{timestamp}_{unique_id}.pdf"
 
-    # Create data/job_descriptions directory if it doesn't exist
     os.makedirs("data/job_descriptions", exist_ok=True)
     file_path = os.path.join("data/job_descriptions", filename)
 
     try:
-        # Save file
+        # Step 1: Save and process the uploaded Job Description
         with open(file_path, "wb") as f:
             contents = await file.read()
             f.write(contents)
 
-        # Process file using zerox and extract markdown content
         parsed_data, markdown_content = await extract_job_description_data(
-            file_path, 
-            job_title=job_title, 
-            company=company
+            file_path, job_title=job_title, company=company
         )
-        
-        # Validate markdown content
-        if not isinstance(markdown_content, str):
-            raise ValueError(f"Expected string markdown content but got {type(markdown_content)}")
+        print(f"Extracted job description content: {markdown_content[:30]}...")  # Log first 30 chars for debugging
+        if not isinstance(markdown_content, str) or not markdown_content:
+            raise ValueError("Extracted job description content is invalid.")
             
-        # Store data in Firestore
+        # Step 2: Store the processed JD in Firestore to get a doc_id
         doc_id = await store_job_description_data(user_id, filename, parsed_data)
 
-        # Schedule file cleanup in background after processing
+        # Step 3: Schedule background tasks for matching and cleanup
+        background_tasks.add_task(
+            find_and_generate_matches, 
+            job_id=doc_id, 
+            job_content=markdown_content,
+            num_matches_to_generate=num_matches
+        )
         background_tasks.add_task(cleanup_file, file_path)
-        
-        # Schedule background task to generate matches for all candidates
-        background_tasks.add_task(generate_matches_for_job, doc_id, markdown_content)
 
-        # Get metadata for response if available
-        metadata = parsed_data.get("metadata", {})
-        
-        # Return response
+        # Step 4: Return an immediate response to the user
         return JobDescriptionResponse(
             user_id=user_id,
             timestamp=datetime.now(),
@@ -186,15 +158,18 @@ async def upload_job_description(
             extracted_content=markdown_content,
             format="markdown",
             doc_id=doc_id,
-            metadata=metadata,
+            metadata=parsed_data.get("metadata", {}),
             job_title=parsed_data.get("job_title"),
-            company=parsed_data.get("company")
+            company=parsed_data.get("company"),
+            detail=f"Successfully uploaded. Matching process for top {num_matches} candidates has started in the background."
         )
     except Exception as e:
-        # Ensure file is cleaned up in case of error
         if os.path.exists(file_path):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Job description processing failed: {str(e)}")
+
+# The rest of the file (GET, DELETE endpoints) remains the same
+# ... (get_job_description, get_user_jobs, remove_job_description, cleanup_file) ...
 
 @router.get(
     "/{job_id}",
@@ -202,9 +177,6 @@ async def upload_job_description(
     responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}
 )
 async def get_job_description(job_id: str):
-    """
-    Get a job description by ID
-    """
     try:
         job_data = await get_job_description_data(job_id)
         
@@ -228,9 +200,6 @@ async def get_job_description(job_id: str):
     responses={500: {"model": ErrorResponse}}
 )
 async def get_user_jobs(user_id: str):
-    """
-    Get all job descriptions for a user
-    """
     try:
         jobs = await get_user_job_descriptions(user_id)
         
@@ -256,9 +225,6 @@ async def get_user_jobs(user_id: str):
     responses={404: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}
 )
 async def remove_job_description(job_id: str, user_id: str):
-    """
-    Delete a job description
-    """
     try:
         success = await delete_job_description(user_id, job_id)
         return {"message": "Job description deleted successfully"}
@@ -269,6 +235,26 @@ async def remove_job_description(job_id: str, user_id: str):
             raise HTTPException(status_code=404, detail=str(e))
         else:
             raise HTTPException(status_code=500, detail=f"Failed to delete job description: {str(e)}")
+        
+@router.get(
+    "/{job_id}/embedding",
+    response_model=Dict[str, Any],
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}}
+)
+async def get_job_description_embedding(job_id: str):
+    """
+    Generate and return the embedding for the specified job description ID.
+    """
+    try:
+        job_data = await get_job_description_data(job_id)
+        jd_content = job_data.get("extracted_content")
+        if not jd_content:
+            raise HTTPException(status_code=404, detail="Job description content not found.")
+        embedding = get_embedding(jd_content)
+        return {"job_id": job_id, "embedding": embedding}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
+
 
 def cleanup_file(file_path: str):
     """Remove temporary file after processing"""

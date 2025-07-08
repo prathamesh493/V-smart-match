@@ -15,7 +15,7 @@ class ResumeJobMatcher:
     Service for matching resumes to job descriptions using Gemini's AI capabilities.
     """
     
-    def __init__(self, model_name: str = "gemini-2.5-pro-exp-03-25"):
+    def __init__(self, model_name: str = "gemini-2.5-pro"):
         """
         Initialize the matcher with the specified model.
         
@@ -127,9 +127,13 @@ class ResumeJobMatcher:
                 analysis_result = json.loads(analysis_text)
                 
                 # Add token usage if available
-                if hasattr(response, 'usage'):
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                    # Input tokens
                     analysis_result["promptTokens"] = response.usage_metadata.prompt_token_count
-                    analysis_result["completionTokens"] = response.usage_metadata.total_token_count
+                    # Output tokens[]
+                    analysis_result["completionTokens"] = response.usage_metadata.candidates_token_count
+                    # Total billed tokens
+                    analysis_result["totalTokens"] = response.usage_metadata.total_token_count
                 
                 # Ensure all required fields exist
                 if "overallScore" not in analysis_result:

@@ -278,3 +278,16 @@ async def get_candidate_report(
             report.leetcode_problems_solved = leetcode_doc.get("problems_solved", {})
     
     return report
+
+@router.get("/basic-info/{candidate_id}", response_model=Dict[str, str])
+async def get_candidate_basic_info(candidate_id: str):
+    """
+    Return candidate's name and email for the given candidate user ID.
+    """
+    candidate_doc = await get_document("candidates", candidate_id)
+    if not candidate_doc:
+        raise HTTPException(status_code=404, detail=f"Candidate with ID {candidate_id} not found")
+    return {
+        "full_name": candidate_doc.get("fullName", ""),
+        "email": candidate_doc.get("email", "")
+    }

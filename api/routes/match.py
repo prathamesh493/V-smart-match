@@ -1,5 +1,5 @@
 from typing import Dict, List, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks, Body
 from pydantic import BaseModel
 
 # Import Firebase utilities
@@ -275,3 +275,22 @@ async def delete_match(match_id: str):
     # await delete_document("matches", match_id)
     
     return {"message": f"Match {match_id} deleted successfully"}
+
+@router.patch("/{match_id}", response_model=Dict[str, Any])
+async def update_match(match_id: str, updates: Dict[str, Any] = Body(...)):
+    """
+    Update details of a match by its ID. Accepts a JSON body with fields to update.
+    """
+    # Fetch the existing match
+    match_doc = await get_document("matches", match_id)
+    if not match_doc:
+        raise HTTPException(status_code=404, detail=f"Match with ID {match_id} not found")
+    
+    # Update the document with provided fields
+    try:
+        await update_document("matches", match_id, updates)
+        # Return the updated document
+        updated_doc = await get_document("matches", match_id)
+        return updated_doc
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update match: {str(e)}")

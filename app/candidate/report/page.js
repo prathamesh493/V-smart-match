@@ -410,15 +410,19 @@ export default function CandidateReport() {
                 {/* Languages */}
                 <div>
                   <h3 className="text-xl font-semibold mb-4">Languages Used</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {leetcode.profile_data.languageStats.matchedUser.languageProblemCount.map((lang, index) => (
-                      <div key={index} className="bg-white/5 rounded-lg p-3 text-center">
-                        <p className="font-medium">{lang.languageName}</p>
-                        <p className="text-2xl font-bold text-purple-300">{lang.problemsSolved}</p>
-                        <p className="text-white/60 text-sm">Problems</p>
-                      </div>
-                    ))}
-                  </div>
+                  {leetcode?.profile_data?.languageStats?.matchedUser?.languageProblemCount ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {leetcode.profile_data.languageStats.matchedUser.languageProblemCount.map((lang, index) => (
+                        <div key={index} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className="font-medium">{lang.languageName}</p>
+                          <p className="text-2xl font-bold text-purple-300">{lang.problemsSolved}</p>
+                          <p className="text-white/60 text-sm">Problems</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-white/80">No LeetCode language data available.</p>
+                  )}
                 </div>
               </div>
             ) : (

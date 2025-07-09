@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { UserCircle, AlertCircle, Search, ArrowLeft } from "lucide-react"
 import Header from "@/components/Header"
@@ -18,9 +18,11 @@ export default function MatchReport() {
   const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const jobId = searchParams.get("jobId")
+  const csvLinkRef = useRef(null);
 
   // Track authentication loading separately from data loading
   const [isDataLoading, setIsDataLoading] = useState(false)
+  const [candidateDetails, setCandidateDetails] = useState({});
 
   // Handle authentication and initial redirect
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function MatchReport() {
     }
   }, [jobId, user, authLoading]) // Remove isLoading from dependencies
 
+  // filteredCandidates must be defined before useEffect that fetches candidate details
   const filteredCandidates = candidates
     .filter((candidate) => candidate.overallScore >= threshold)
     .filter((candidate) => {
@@ -78,16 +81,87 @@ export default function MatchReport() {
     })
     .sort((a, b) => b.overallScore - a.overallScore)
 
+  // Fetch candidate details for all filtered candidates
+  useEffect(() => {
+    async function fetchAllCandidateDetails() {
+      const idsToFetch = filteredCandidates
+        .map(c => c.candidateId)
+        .filter(id => id && !candidateDetails[id]);
+      if (idsToFetch.length === 0) return;
+      const newDetails = { ...candidateDetails };
+      await Promise.all(idsToFetch.map(async (id) => {
+        try {
+          const res = await fetch(`http://localhost:8000/api/candidate/basic-info/${id}`);
+          if (res.ok) {
+            const data = await res.json();
+            newDetails[id] = data;
+          }
+        } catch (e) {
+          // fallback to empty if error
+          newDetails[id] = { full_name: '', email: '' };
+        }
+      }));
+      setCandidateDetails(newDetails);
+    }
+    fetchAllCandidateDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredCandidates]);
+
+  // Split candidates by selection status
+  const selectedCandidates = filteredCandidates.filter(c => c.selection === 'yes');
+  const rejectedCandidates = filteredCandidates.filter(c => c.selection === 'no');
+  const unreviewedCandidates = filteredCandidates.filter(c => !c.selection);
+
+  // CSV Export logic
+  function handleExportCSV() {
+    const headers = [
+      "Candidate Name",
+      "Candidate Email",
+      "Candidate ID",
+      "Match ID",
+      "Overall Score",
+      "Selection",
+      "Key Skills"
+    ];
+    const rows = filteredCandidates.map(c => [
+      candidateDetails[c.candidateId]?.full_name || "",
+      candidateDetails[c.candidateId]?.email || "",
+      c.candidateId,
+      c.matchId,
+      c.overallScore,
+      c.selection || "",
+      (c.categoryScores?.skillsMatch?.keyMatches?.map(s => `${s.skill} (${s.relevance}%)`).join('; ') || "")
+    ]);
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    if (csvLinkRef.current) {
+      csvLinkRef.current.href = url;
+      csvLinkRef.current.download = `candidates_export_${jobId || ''}.csv`;
+      csvLinkRef.current.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
       <Header />
       <main className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
+          <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <Link href="/company/listing" className="text-white/80 hover:text-white flex items-center">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Job Listings
             </Link>
+            <button
+              onClick={handleExportCSV}
+              className="px-6 py-2 bg-white text-purple-700 rounded-lg font-medium hover:bg-gray-100 transition-colors border border-white/20"
+            >
+              Export All as CSV
+            </button>
+            <a ref={csvLinkRef} style={{ display: 'none' }} />
           </div>
 
           {authLoading || isDataLoading ? (
@@ -143,76 +217,107 @@ export default function MatchReport() {
                 />
               </div>
 
-              {filteredCandidates.length === 0 ? (
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-12 text-center">
-                  <UserCircle className="h-16 w-16 mx-auto mb-4 text-white/70" />
-                  <h2 className="text-2xl font-bold text-white mb-2">No Matching Candidates Found</h2>
-                  <p className="text-white/70 mb-6">
-                    {threshold > 0
-                      ? `Try lowering the qualification threshold below ${threshold}%`
-                      : "There are no candidate matches for this job listing yet."}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredCandidates.map((candidate) => (
-                    <div
-                      key={candidate.matchId}
-                      className="backdrop-blur-lg bg-white/10 rounded-xl p-6 border border-white/20 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className="p-2 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
-                            <UserCircle className="h-8 w-8 text-white" />
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-bold text-white">
-                              Candidate {candidate.candidateId.substring(0, 6)}
-                            </h3>
-                            <p className="text-sm text-white/75">Match ID: {candidate.matchId.substring(0, 10)}...</p>
-                          </div>
-                        </div>
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                            candidate.overallScore >= 80
-                              ? "bg-green-500/30 text-green-100"
-                              : candidate.overallScore >= 60
-                                ? "bg-yellow-500/30 text-yellow-100"
-                                : "bg-red-500/30 text-red-100"
-                          }`}
-                        >
-                          {candidate.overallScore}% Match
-                        </span>
-                      </div>
-
-                      <div className="mb-6">
-                        <h4 className="font-medium mb-2 text-white/90">Key Skills</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {candidate.categoryScores?.skillsMatch?.keyMatches?.map((skill, index) => (
-                            <span
-                              key={index}
-                              className="px-3 py-1 bg-white/20 rounded-full text-sm text-white/90 hover:bg-white/30 transition-colors"
-                            >
-                              {skill.skill} ({skill.relevance}%)
-                            </span>
-                          )) || <span className="text-white/60">No skills data available</span>}
-                        </div>
-                      </div>
-
-                      <Link
-                        href={`/company/report/${candidate.matchId}`}
-                        className="block w-full py-3 px-6 bg-white/20 text-white text-center rounded-full font-semibold hover:bg-white/30 transition-colors border border-white/20"
-                      >
-                        View Profile
-                      </Link>
-                    </div>
-                  ))}
+              {/* Selected Candidates */}
+              {selectedCandidates.length > 0 && (
+                <div className="mb-12">
+                  <h2 className="text-2xl font-bold text-green-200 mb-4">Selected Candidates</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {selectedCandidates.map((candidate) => (
+                      <CandidateCard key={candidate.matchId} candidate={candidate} candidateDetails={candidateDetails} />
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Rejected Candidates */}
+              {rejectedCandidates.length > 0 && (
+                <div className="mb-12">
+                  <h2 className="text-2xl font-bold text-red-200 mb-4">Rejected Candidates</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {rejectedCandidates.map((candidate) => (
+                      <CandidateCard key={candidate.matchId} candidate={candidate} candidateDetails={candidateDetails} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Unreviewed Candidates */}
+              <div className="mb-12">
+                <h2 className="text-2xl font-bold text-white mb-4">Unreviewed Candidates</h2>
+                {unreviewedCandidates.length === 0 ? (
+                  <div className="bg-white/10 backdrop-blur-sm rounded-lg p-12 text-center">
+                    <UserCircle className="h-16 w-16 mx-auto mb-4 text-white/70" />
+                    <h2 className="text-2xl font-bold text-white mb-2">No Unreviewed Candidates</h2>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {unreviewedCandidates.map((candidate) => (
+                      <CandidateCard key={candidate.matchId} candidate={candidate} candidateDetails={candidateDetails} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
       </main>
     </div>
   )
+}
+
+// CandidateCard component for reuse
+function CandidateCard({ candidate, candidateDetails }) {
+  const details = candidateDetails[candidate.candidateId] || {};
+  return (
+    <div
+      className="backdrop-blur-lg bg-white/10 rounded-xl p-6 border border-white/20 hover:shadow-xl transition-all duration-300 hover:scale-105 group"
+    >
+      <div className="flex justify-between items-start mb-4">
+        <div className="flex items-center gap-4">
+          <div className="p-2 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
+            <UserCircle className="h-8 w-8 text-white" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white">
+              {details.full_name || 'Unknown Name'}
+            </h3>
+            <p className="text-sm text-white/75">{details.email || 'Unknown Email'}</p>
+            <p className="text-xs text-white/50">ID: {candidate.candidateId.substring(0, 10)}...</p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+            candidate.overallScore >= 80
+              ? "bg-green-500/30 text-green-100"
+              : candidate.overallScore >= 60
+                ? "bg-yellow-500/30 text-yellow-100"
+                : "bg-red-500/30 text-red-100"
+          }`}
+        >
+          {candidate.overallScore}% Match
+        </span>
+      </div>
+
+      <div className="mb-6">
+        <h4 className="font-medium mb-2 text-white/90">Key Skills</h4>
+        <div className="flex flex-wrap gap-2">
+          {candidate.categoryScores?.skillsMatch?.keyMatches?.map((skill, index) => (
+            <span
+              key={index}
+              className="px-3 py-1 bg-white/20 rounded-full text-sm text-white/90 hover:bg-white/30 transition-colors"
+            >
+              {skill.skill} ({skill.relevance}%)
+            </span>
+          )) || <span className="text-white/60">No skills data available</span>}
+        </div>
+      </div>
+
+      <Link
+        href={`/company/report/${candidate.matchId}`}
+        className="block w-full py-3 px-6 bg-white/20 text-white text-center rounded-full font-semibold hover:bg-white/30 transition-colors border border-white/20"
+      >
+        View Profile
+      </Link>
+    </div>
+  );
 }

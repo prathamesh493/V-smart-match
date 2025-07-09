@@ -35,20 +35,6 @@ export default function RecruiterDashboard() {
       icon: Briefcase,
       href: "/company/listing",
       gradient: "from-green-500 to-emerald-600"
-    },
-    {
-      title: "Match Report",
-      description: "View comprehensive candidate matching reports with detailed skill alignment and compatibility scores.",
-      icon: PieChart,
-      href: "/company/match-report",
-      gradient: "from-pink-500 to-rose-600"
-    },
-    {
-      title: "Notifications",
-      description: "Send personalized notifications to candidates and manage your communication workflows efficiently.",
-      icon: Bell,
-      href: "/company/notifications",
-      gradient: "from-blue-500 to-cyan-600"
     }
   ]
 
@@ -64,7 +50,7 @@ export default function RecruiterDashboard() {
             Streamline your hiring process with AI-powered candidate matching and efficient communication tools.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up animation-delay-400">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 animate-fade-in-up animation-delay-400">
             {features.map((feature, index) => (
               <Link
                 key={feature.title}

@@ -1,5 +1,4 @@
 // This is the server component
-import { Suspense } from "react"
 import { Code, UserCircle, Download, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -8,6 +7,7 @@ import Header from "@/components/Header"
 import { Badge } from "@/components/ui/badge"
 import ClientCategoryScoresCard from "./ClientCategoryScoresCard"
 import Link from "next/link"
+import AcceptRejectButtons from "./AcceptRejectButtons"
 
 async function getMatchReport(id) {
   try {
@@ -83,10 +83,14 @@ export default async function CompanyCandidateReport({ params }) {
               <CheckCircle className="w-5 h-5 text-white" />
             </div>
           </div>
-          <Button className="bg-white text-purple-700 hover:bg-gray-100">
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </Button>
+          <div className="flex gap-2 items-center">
+            <Button className="bg-white text-purple-700 hover:bg-gray-100">
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
+            {/* Accept/Reject Buttons or Status */}
+            <AcceptRejectButtons matchId={reportData.matchId} initialSelection={reportData.selection} />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -96,9 +100,7 @@ export default async function CompanyCandidateReport({ params }) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Suspense fallback={<LoadingCard title="Category Scores" />}>
-            <ClientCategoryScoresCard categoryScores={reportData.categoryScores} />
-          </Suspense>
+          <ClientCategoryScoresCard categoryScores={reportData.categoryScores} />
           <SkillsMatchCard skillsMatch={reportData.categoryScores.skillsMatch} />
           <SoftSkillsMatchCard softSkillsMatch={reportData.categoryScores.softSkillsMatch} />
           <MissingSkillsCard missingSkills={reportData.categoryScores.skillsMatch.missingCriticalSkills} />

@@ -289,14 +289,6 @@ class ResumeJobMatcher:
         return f"""
 You are an expert AI system for matching job candidates to job descriptions. You need to analyze the resume and job description provided below and generate a comprehensive match analysis with numerical scores and explanations.
 
-# RESUME CONTENT:
-{resume_content}
-
-# JOB DESCRIPTION:
-{job_description_content}
-{github_section}
-{leetcode_section}
-
 # YOUR TASK:
 Analyze how well the candidate's resume matches the job description. If GitHub and LeetCode data are provided, use them to enhance your analysis, especially for technical roles.
 
@@ -360,7 +352,6 @@ Return your analysis as a JSON object with the following structure:
 }}
 ```
 
-
 Your analysis must be data-driven and objective. Back up all scores with evidence from the resume and job description. Provide specific examples of matches and mismatches.
 
 If GitHub data is available, consider:
@@ -374,6 +365,14 @@ If LeetCode data is available, consider:
 - Demonstrated skills in algorithms and data structures if relevant
 
 Return ONLY the JSON object with no additional text or explanation.
+
+# JOB DESCRIPTION:
+{job_description_content}
+
+# RESUME CONTENT:
+{resume_content}
+{github_section}
+{leetcode_section}
 """
 
 # Function to get a single match between resume and job description

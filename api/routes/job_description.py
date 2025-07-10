@@ -34,9 +34,8 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
 
         print(f"Job embedding is: {job_embedding}")
 
-        # 2. Query Pinecone: fetch 2x the desired number for resilience
-        top_k_to_fetch = num_matches_to_generate * 2
-        query_results = query_embedding(embedding=job_embedding, top_k=top_k_to_fetch)
+        # 2. Query Pinecone: fetch the desired number of candidate resumes
+        query_results = query_embedding(embedding=job_embedding, top_k=num_matches_to_generate)
 
         print(f"Query results from Pinecone: {query_results}")
         
@@ -44,17 +43,12 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
         if not pinecone_matches:
             print(f"No potential candidates found in Pinecone for job {job_id}")
             return
-            
-        resume_ids = [match['id'] for match in pinecone_matches]
-        print(f"Found {len(resume_ids)} potential candidate resumes from Pinecone.")
 
         # 3. Process each potential candidate and generate a full match report
-        generated_count = 0
-        for resume_id in resume_ids:
-            if generated_count >= num_matches_to_generate:
-                print("Target number of matches generated. Stopping.")
-                break
+        for pinecone_match in pinecone_matches:
             try:
+                resume_id = pinecone_match['id']
+                score = pinecone_match.get('score')
                 # Fetch resume and associated candidate details
                 resume_doc = await get_document("resumes", resume_id)
                 if not resume_doc or "user_id" not in resume_doc:
@@ -83,10 +77,10 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
                 
                 match_result["candidate_name"] = candidate_doc.get("fullName", "")
                 match_result["candidate_email"] = candidate_doc.get("email", "")
+                match_result["embedding_score"] = score
                 
                 await add_document("matches", match_result["matchId"], match_result)
-                print(f"Created match {match_result['matchId']} for candidate {candidate_id}")
-                generated_count += 1
+                print(f"Created match {match_result['matchId']} for candidate {candidate_id} (embedding_score={score})")
 
             except Exception as e:
                 print(f"Error generating match for resume {resume_id}: {str(e)}")
@@ -97,7 +91,6 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
     except Exception as e:
         print(f"FATAL Error in background matching task for job {job_id}: {str(e)}")
 
-# --- CONSOLIDATED SINGLE ENDPOINT ---
 @router.post(
     "/upload",
     response_model=JobDescriptionResponse,

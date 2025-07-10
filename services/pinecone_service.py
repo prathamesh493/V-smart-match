@@ -5,7 +5,7 @@ from pinecone import Pinecone
 from typing import List, Dict, Any
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-pc = Pinecone(api_key="pcsk_28MgEy_PotSsF19LHaX42NLpfeQQikpFFmEToxc5GZSXjBixGz1p6YAydL6h6yUKfoxbhF")
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
 INDEX_NAME = "vsmart-embeddings"
 index = pc.Index(INDEX_NAME)

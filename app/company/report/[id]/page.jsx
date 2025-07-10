@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import ClientCategoryScoresCard from "./ClientCategoryScoresCard"
 import Link from "next/link"
 import AcceptRejectButtons from "./AcceptRejectButtons"
+import CompanyNavBarClientWrapper from './CompanyNavBarClientWrapper';
 
 async function getMatchReport(id) {
   try {
@@ -15,19 +16,58 @@ async function getMatchReport(id) {
     if (!response.ok) {
       throw new Error("Failed to fetch report data")
     }
-    return await response.json()
+    const data = await response.json()
+    console.log("Match report data:", data) // This will log to your server terminal
+    return data
   } catch (error) {
     console.error("Error fetching report:", error)
     throw error
   }
 }
 
+async function getJobDescription(jdId) {
+  try {
+    const response = await fetch(`http://localhost:8000/api/job-description/${jdId}`, { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error("Failed to fetch job description")
+    }
+    const data = await response.json()
+    return data.description || data.extracted_content || "No JD available."
+  } catch (error) {
+    console.error("Error fetching JD:", error)
+    return "No JD available."
+  }
+}
+
+async function getCandidateResume(candidateId) {
+  try {
+    const response = await fetch(`http://localhost:8000/api/resume/${candidateId}`, { cache: "no-store" })
+    if (!response.ok) {
+      throw new Error("Failed to fetch candidate resume")
+    }
+    const data = await response.json()
+    return data.resume || data.extracted_content || "No resume available."
+  } catch (error) {
+    console.error("Error fetching resume:", error)
+    return "No resume available."
+  }
+}
+
 export default async function CompanyCandidateReport({ params }) {
   let reportData
   let error = null
+  let jobDescription = ""
+  let candidateResume = ""
 
   try {
     reportData = await getMatchReport(params.id)
+    // Fetch JD and Resume in parallel
+    const [jd, resume] = await Promise.all([
+      getJobDescription(reportData.jobDescriptionId),
+      getCandidateResume(reportData.candidateId)
+    ])
+    jobDescription = jd
+    candidateResume = resume
   } catch (err) {
     error = err.message || "Failed to load candidate report"
   }
@@ -59,18 +99,34 @@ export default async function CompanyCandidateReport({ params }) {
     )
   }
 
+  // Collapsible state for JD and Resume (client-side only)
+  // We'll use a simple fallback for SSR: show both expanded
+  const CollapsibleSection = ({ title, content }) => (
+    <div className="w-full md:w-1/2 p-2">
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="font-bold text-purple-700 mb-2">{title}</div>
+        <div className="text-gray-800 whitespace-pre-line text-sm max-h-64 overflow-y-auto">{content}</div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">
       <Header />
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <Link
-            href={`/company/match-report?jobId=${reportData.jobDescriptionId}`}
-            className="text-white/80 hover:text-white flex items-center"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Matches
-          </Link>
+        <CompanyNavBarClientWrapper />
+        {/* Candidate Info */}
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-1">{reportData.candidate_name}</h1>
+            <div className="text-lg font-semibold text-fuchsia-100">{reportData.candidate_email}</div>
+          </div>
+        </div>
+
+        {/* Collapsible JD & Resume */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <CollapsibleSection title="Extracted Job Description" content={jobDescription} />
+          <CollapsibleSection title="Candidate Resume" content={candidateResume} />
         </div>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
@@ -81,6 +137,7 @@ export default async function CompanyCandidateReport({ params }) {
                 {reportData.overallScore}% Match
               </span>
               <CheckCircle className="w-5 h-5 text-white" />
+              <span className="ml-4 text-white/80 text-base font-medium bg-purple-700 px-2 py-1 rounded">Embedding Score: {reportData.embedding_score ? (reportData.embedding_score * 100).toFixed(1) : "N/A"}%</span>
             </div>
           </div>
           <div className="flex gap-2 items-center">

@@ -9,6 +9,7 @@ import ClientCategoryScoresCard from "./ClientCategoryScoresCard"
 import Link from "next/link"
 import AcceptRejectButtons from "./AcceptRejectButtons"
 import CompanyNavBarClientWrapper from './CompanyNavBarClientWrapper';
+import ReactMarkdown from 'react-markdown';
 
 async function getMatchReport(id) {
   try {
@@ -17,7 +18,7 @@ async function getMatchReport(id) {
       throw new Error("Failed to fetch report data")
     }
     const data = await response.json()
-    console.log("Match report data:", data) // This will log to your server terminal
+    console.log("Match report data:", data) 
     return data
   } catch (error) {
     console.error("Error fetching report:", error)
@@ -102,13 +103,16 @@ export default async function CompanyCandidateReport({ params }) {
   // Collapsible state for JD and Resume (client-side only)
   // We'll use a simple fallback for SSR: show both expanded
   const CollapsibleSection = ({ title, content }) => (
-    <div className="w-full md:w-1/2 p-2">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="font-bold text-purple-700 mb-2">{title}</div>
-        <div className="text-gray-800 whitespace-pre-line text-sm max-h-64 overflow-y-auto">{content}</div>
+  <div className="w-full md:w-1/2 p-2">
+    <div className="bg-white rounded-lg shadow p-4 flex flex-col">
+      <div className="font-bold text-purple-700 mb-2">{title}</div>
+      {/* Add the `prose` class for beautiful styling */}
+      <div className="prose prose-sm max-w-none max-h-64 overflow-y-auto">
+        <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     </div>
-  )
+  </div>
+);
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">

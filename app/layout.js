@@ -1,12 +1,12 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '../context/AuthContext'; // Adjust path if needed
+import { AuthProvider } from '@/lib/useAuth'; // Adjust path
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'vSmart Match',
-  description: 'Precision hiring platform that matches candidates with job descriptions',
+  description: 'Precision hiring platform that matches candidates with job descriptions.',
 };
 
 export default function RootLayout({ children }) {

@@ -22,7 +22,7 @@ router = APIRouter(prefix="/job-description", tags=["job_description"])
 
 
 # This is our efficient background task function
-async def find_and_generate_matches(job_id: str, job_content: str, num_matches_to_generate: int):
+async def find_and_generate_matches(job_id: str, job_content: str, num_matches_to_generate: int, recruiter_id: str, job_title: str):
     """
     Background task to find top candidates via vector search and generate detailed match reports.
     """
@@ -78,6 +78,8 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
                 match_result["candidate_name"] = candidate_doc.get("fullName", "")
                 match_result["candidate_email"] = candidate_doc.get("email", "")
                 match_result["embedding_score"] = score
+                match_result["recruiterId"] = recruiter_id
+                match_result["jobTitle"] = job_title
                 
                 await add_document("matches", match_result["matchId"], match_result)
                 print(f"Created match {match_result['matchId']} for candidate {candidate_id} (embedding_score={score})")
@@ -139,7 +141,9 @@ async def upload_job_description_and_match(
             find_and_generate_matches, 
             job_id=doc_id, 
             job_content=markdown_content,
-            num_matches_to_generate=num_matches
+            num_matches_to_generate=num_matches,
+            recruiter_id=user_id,
+            job_title=parsed_data.get("job_title", "Untitled Job")
         )
         background_tasks.add_task(cleanup_file, file_path)
 

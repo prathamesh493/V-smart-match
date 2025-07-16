@@ -162,54 +162,43 @@ async def delete_document(collection_name: str, doc_id: str) -> bool:
 
 async def query_documents(
     collection_name: str, 
-    field: str = None, 
-    operator: str = None, 
-    value: Any = None,
+    conditions: Optional[List[tuple]] = None, # <<< MODIFIED
     order_by: str = None,
     direction: str = "ASCENDING",
     limit: int = 50,
     start_after: Any = None
 ) -> List[Dict[str, Any]]:
     """
-    Query documents in a collection with filtering, ordering, and pagination.
+    Query documents in a collection with multiple filters, ordering, and pagination.
     
     Args:
         collection_name: Name of the collection
-        field: Field to filter on (optional)
-        operator: Comparison operator (==, >, <, >=, <=, array_contains, in)
-        value: Value to compare against
-        order_by: Field to order results by
-        direction: Direction to order (ASCENDING or DESCENDING)
-        limit: Maximum number of documents to return
-        start_after: Document to start after for pagination
-        
-    Returns:
-        List of documents matching the query
+        conditions: List of tuples for filtering, e.g., [("field", "==", "value")]
+        # ... other args remain the same
     """
     try:
         db = get_db()
         query = db.collection(collection_name)
         
-        # Apply filter if specified
-        if field and operator and value is not None:
-            query = query.where(field, operator, value)
+        # <<< MODIFIED: Apply multiple filters if specified
+        if conditions:
+            for condition in conditions:
+                field, operator, value = condition
+                query = query.where(field, operator, value)
         
         # Apply ordering if specified
         if order_by:
             direction_obj = firestore.Query.ASCENDING if direction == "ASCENDING" else firestore.Query.DESCENDING
             query = query.order_by(order_by, direction=direction_obj)
         
-        # Apply pagination if specified
+        # ... rest of the function remains the same ...
         if start_after:
             query = query.start_after(start_after)
             
-        # Apply limit
         query = query.limit(limit)
         
-        # Execute query
         docs = query.stream()
         
-        # Convert to list of dictionaries
         results = []
         for doc in docs:
             doc_dict = document_to_dict(doc)

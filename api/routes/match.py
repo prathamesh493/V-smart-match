@@ -294,3 +294,62 @@ async def update_match(match_id: str, updates: Dict[str, Any] = Body(...)):
         return updated_doc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update match: {str(e)}")
+    
+# Add this new endpoint in routes/match.py
+
+class OtherMatch(BaseModel):
+    matchId: str
+    jobTitle: str
+    overallScore: float
+
+@router.get(
+    "/by-recruiter/other-matches", 
+    response_model=List[OtherMatch],
+    summary="Get Other Matches by Recruiter"
+)
+async def get_other_matches_by_recruiter(
+    candidate_id: str = Query(..., description="The ID of the candidate."),
+    recruiter_id: str = Query(..., description="The ID of the recruiter (user_id)."),
+    current_match_id: str = Query(..., description="The ID of the current match to exclude from results.")
+):
+    """
+    Finds all other job matches for a specific candidate under the same recruiter,
+    excluding the match that is currently being viewed.
+    
+    This relies on denormalized `recruiterId` and `jobTitle` fields in the `matches` collection
+    and requires a composite index on (candidateId, recruiterId, overallScore).
+    """
+    try:
+        # Define the query conditions
+        query_conditions = [
+            ("candidateId", "==", candidate_id),
+            ("recruiterId", "==", recruiter_id)
+        ]
+        
+        # Query Firestore using your existing service function
+        # NOTE: Assumes query_documents can handle multiple conditions. If not, adapt it.
+        matches = await query_documents(
+            "matches", 
+            conditions=query_conditions, 
+            order_by="overallScore", 
+            direction="DESCENDING"
+        )
+        
+        # Filter out the current match and format the response
+        other_matches = []
+        for match in matches:
+            if match.get("id") != current_match_id:
+                other_matches.append(
+                    OtherMatch(
+                        matchId=match.get("id"),
+                        jobTitle=match.get("jobTitle", "Untitled Job"),
+                        overallScore=match.get("overallScore", 0)
+                    )
+                )
+        
+        return other_matches
+        
+    except Exception as e:
+        # It's good practice to log the error
+        print(f"Error fetching other matches: {str(e)}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching other matches.")

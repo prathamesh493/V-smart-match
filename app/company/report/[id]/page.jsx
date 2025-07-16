@@ -1,5 +1,5 @@
 // This is the server component
-import { Code, UserCircle, Download, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react"
+import { Code, UserCircle, Download, CheckCircle, AlertCircle, ArrowLeft, Briefcase } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import ClientCategoryScoresCard from "./ClientCategoryScoresCard"
 import Link from "next/link"
 import AcceptRejectButtons from "./AcceptRejectButtons"
 import CompanyNavBarClientWrapper from './CompanyNavBarClientWrapper';
+import ReactMarkdown from 'react-markdown';
 
 async function getMatchReport(id) {
   try {
@@ -17,7 +18,7 @@ async function getMatchReport(id) {
       throw new Error("Failed to fetch report data")
     }
     const data = await response.json()
-    console.log("Match report data:", data) // This will log to your server terminal
+    console.log("Match report data:", data) 
     return data
   } catch (error) {
     console.error("Error fetching report:", error)
@@ -25,17 +26,18 @@ async function getMatchReport(id) {
   }
 }
 
-async function getJobDescription(jdId) {
+// Fetches the full Job Description object
+async function getJobDescriptionData(jdId) {
   try {
     const response = await fetch(`http://localhost:8000/api/job-description/${jdId}`, { cache: "no-store" })
     if (!response.ok) {
       throw new Error("Failed to fetch job description")
     }
-    const data = await response.json()
-    return data.description || data.extracted_content || "No JD available."
+    return await response.json()
   } catch (error) {
     console.error("Error fetching JD:", error)
-    return "No JD available."
+    // Return a default object on error to avoid breaking the page
+    return { extracted_content: "No JD available." }
   }
 }
 
@@ -53,23 +55,50 @@ async function getCandidateResume(candidateId) {
   }
 }
 
+async function getOtherMatches(candidateId, recruiterId, currentMatchId) {
+  if (!candidateId || !recruiterId || !currentMatchId) return [];
+  try {
+    const apiUrl = `http://localhost:8000/api/match/by-recruiter/other-matches?candidate_id=${candidateId}&recruiter_id=${recruiterId}&current_match_id=${currentMatchId}`;
+    const response = await fetch(apiUrl, { cache: "no-store" });
+    if (!response.ok) {
+      console.error("Failed to fetch other matches, status:", response.status);
+      return [];
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error in getOtherMatches:", error);
+    return [];
+  }
+}
+
 export default async function CompanyCandidateReport({ params }) {
-  let reportData
-  let error = null
-  let jobDescription = ""
-  let candidateResume = ""
+  let reportData;
+  let error = null;
+  let jobDescriptionData = {};
+  let candidateResume = "";
+  let otherMatches = [];
 
   try {
-    reportData = await getMatchReport(params.id)
-    // Fetch JD and Resume in parallel
-    const [jd, resume] = await Promise.all([
-      getJobDescription(reportData.jobDescriptionId),
-      getCandidateResume(reportData.candidateId)
-    ])
-    jobDescription = jd
-    candidateResume = resume
+    reportData = await getMatchReport(params.id);
+    
+    // Fetch JD, Resume, and Other Matches in parallel for efficiency
+    const [jdData, resume, matches] = await Promise.all([
+      getJobDescriptionData(reportData.jobDescriptionId),
+      getCandidateResume(reportData.candidateId),
+      // Use the new function. It requires recruiterId from the job description.
+      // We first fetch the JD to get recruiterId, then fetch other matches.
+      // A slightly more optimized way is shown below.
+    ]);
+    jobDescriptionData = jdData;
+    candidateResume = resume;
+    
+    // Now that we have the recruiterId, fetch the other matches
+    if (jobDescriptionData.user_id) {
+       otherMatches = await getOtherMatches(reportData.candidateId, jobDescriptionData.user_id, reportData.matchId);
+    }
+    
   } catch (err) {
-    error = err.message || "Failed to load candidate report"
+    error = err.message || "Failed to load candidate report";
   }
 
   if (error) {
@@ -102,13 +131,16 @@ export default async function CompanyCandidateReport({ params }) {
   // Collapsible state for JD and Resume (client-side only)
   // We'll use a simple fallback for SSR: show both expanded
   const CollapsibleSection = ({ title, content }) => (
-    <div className="w-full md:w-1/2 p-2">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="font-bold text-purple-700 mb-2">{title}</div>
-        <div className="text-gray-800 whitespace-pre-line text-sm max-h-64 overflow-y-auto">{content}</div>
+  <div className="w-full md:w-1/2 p-2">
+    <div className="bg-white rounded-lg shadow p-4 flex flex-col">
+      <div className="font-bold text-purple-700 mb-2">{title}</div>
+      {/* Add the `prose` class for beautiful styling */}
+      <div className="prose prose-sm max-w-none max-h-64 overflow-y-auto">
+        <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     </div>
-  )
+  </div>
+);
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-600 to-fuchsia-600">
@@ -125,7 +157,7 @@ export default async function CompanyCandidateReport({ params }) {
 
         {/* Collapsible JD & Resume */}
         <div className="flex flex-col md:flex-row gap-4 mb-8">
-          <CollapsibleSection title="Extracted Job Description" content={jobDescription} />
+          <CollapsibleSection title="Extracted Job Description" content={jobDescriptionData.extracted_content} />
           <CollapsibleSection title="Candidate Resume" content={candidateResume} />
         </div>
 
@@ -150,9 +182,10 @@ export default async function CompanyCandidateReport({ params }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
           <OverallScoreCard score={reportData.overallScore} />
           <AnalysisSummaryCard summary={reportData.analysis.summary} />
+          <OtherMatchesCard matches={otherMatches} />
           <MetadataCard metadata={reportData.metadata} matchId={reportData.matchId} />
         </div>
 
@@ -438,3 +471,36 @@ const RecommendationsCard = ({ recommendations }) => {
     </Card>
   )
 }
+
+const OtherMatchesCard = ({ matches }) => {
+  return (
+    <Card className="bg-white overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-purple-600 to-fuchsia-600">
+        <CardTitle className="text-white flex items-center">
+          <Briefcase className="w-5 h-5 mr-2" />
+          Other Matches for this Candidate
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="mt-4 max-h-[250px] overflow-y-auto">
+        {(!matches || matches.length === 0) ? (
+          <p className="text-gray-500 text-center py-8">No other job matches found.</p>
+        ) : (
+          <ul className="space-y-3">
+            {matches.map((match) => (
+              <li key={match.matchId}>
+                <Link href={`/company/report/${match.matchId}`} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <span className="font-medium text-purple-700 hover:underline text-sm truncate pr-2">
+                    {match.jobTitle}
+                  </span>
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 font-bold">
+                    {Math.round(match.overallScore)}%
+                  </Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+};

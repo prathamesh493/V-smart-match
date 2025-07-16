@@ -91,7 +91,7 @@ export default function CandidateDashboard() {
         <div className="max-w-6xl mx-auto">
           {/* Display user email or welcome message */}
           <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-4 animate-fade-in-up">
-            Welcome, {user?.email || 'Candidate'}!
+            Welcome, {user?.fullName || 'Candidate'}!
           </h1>
           <p className="text-xl text-white/90 text-center mb-12 animate-fade-in-up animation-delay-200">
             Our AI has analyzed your profile and found these perfectly matched opportunities.

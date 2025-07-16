@@ -1,8 +1,71 @@
-import Link from "next/link"
+"use client"
+import { useEffect, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '@/firebase/config'
+import { useRouter } from 'next/navigation'
+import Header from '@/components/Header'
+import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import Header from "@/components/Header"
 
 export default function Home() {
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUser(user)
+        try {
+          const userDocRef = doc(db, 'users', user.uid)
+          const userDoc = await getDoc(userDocRef)
+
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            const firestoreUserType = userData.userType
+
+            // Redirect based on userType from Firestore
+            if (firestoreUserType === 'candidate') {
+              router.push('/candidate')
+            } else {
+              router.push('/company')
+            }
+          } else {
+            console.log("No user document found in Firestore. Redirecting to profile setup.")
+            // Optional: Redirect to a profile setup page if the user document doesn't exist
+            // router.push('/profile-setup')
+            setLoading(false) // Stop loading as we are not redirecting to a dashboard
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error)
+          setLoading(false) // Stop loading on error
+        }
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
+    })
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe()
+  }, [router])
+
+  // Display a loading screen while checking for authentication and user data
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5] flex items-center justify-center">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    )
+  }
+
+  // If a user is logged in, the redirection is in progress, so we render nothing.
+  if (user) {
+    return null
+  }
+
+  // Render the homepage content only if there is no authenticated user
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
       <Header />

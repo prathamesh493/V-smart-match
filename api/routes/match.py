@@ -135,18 +135,29 @@ async def get_matches_by_candidate(
 @router.get("/job/{job_description_id}", response_model=List[Dict[str, Any]])
 async def get_matches_by_job(
     job_description_id: str,
-    limit: int = Query(10, description="Maximum number of matches to return"),
-    min_score: Optional[float] = Query(None, description="Minimum overall score filter")
+    limit: int = Query(20, description="Maximum number of matches to return per page"),
+    min_score: float = Query(0, description="Minimum overall score filter"),
+    start_after: Optional[str] = Query(None, description="The last document ID from the previous page for pagination")
 ):
     """
-    Get all matches for a specific job description with optional score filtering.
+    Get paginated and filtered matches for a specific job description.
     """
-    matches = await query_documents("matches", "jobDescriptionId", "==", job_description_id, limit=limit)
+    # 1. Build the conditions list for the query
+    conditions = [
+        ("jobDescriptionId", "==", job_description_id),
+        ("overallScore", ">=", min_score) # Filter by score in the DB
+    ]
     
-    # Apply score filter if specified
-    if min_score is not None:
-        matches = [match for match in matches if match.get("overallScore", 0) >= min_score]
-        
+    # 2. Query the database with filtering, ordering, and pagination
+    matches = await query_documents(
+        collection_name="matches",
+        conditions=conditions,
+        order_by="overallScore", # Sort by score to get the best results first
+        direction="DESCENDING",
+        limit=limit,
+        start_after=start_after
+    )
+    
     return matches
 
 @router.post("/bulk", response_model=List[Dict[str, Any]])

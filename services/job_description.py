@@ -4,6 +4,7 @@ import asyncio
 from typing import Dict, Tuple, Any
 from pyzerox import zerox
 from app.config import GEMINI_API_KEY, GEMINI_MODEL
+from prompts.job_description import JOB_DESCRIPTION_PARSING_PROMPT
 
 # Set Gemini API key for zerox
 os.environ['GEMINI_API_KEY'] = GEMINI_API_KEY
@@ -19,25 +20,8 @@ async def extract_job_description_with_zerox(pdf_path: str) -> Tuple[Dict[str, A
         Tuple containing metadata dictionary and markdown formatted content
     """
     try:
-        # Define the system prompt for job description parsing
-        custom_system_prompt = """
-        You are a specialized AI for parsing job descriptions. Extract the complete content of this job description 
-        and format it in clean, well-structured markdown. Include all information such as:
-        - Job title and company name
-        - Job summary/overview
-        - Responsibilities
-        - Requirements/qualifications
-        - Skills (technical and soft skills)
-        - Education requirements
-        - Experience requirements
-        - Benefits and perks
-        - Location and work type (remote, hybrid, onsite)
-        - Application process
-        - Any other relevant sections
-        
-        Maintain the original structure but convert it to proper markdown format with appropriate headings,
-        bullet points, and formatting.
-        """
+        # Use the centralized prompt for job description parsing
+        custom_system_prompt = JOB_DESCRIPTION_PARSING_PROMPT
         
         # Define model string in zerox format
         model = f"gemini/{GEMINI_MODEL}"

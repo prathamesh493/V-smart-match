@@ -76,6 +76,13 @@ vsmart-backend/
 - `GET /api/profile/{username}` - Get developer profile from GitHub and LeetCode
 - `GET /api/health` - Health check endpoint
 
+### MCQ Generation Endpoints
+- `POST /api/mcq/generate` - Generate MCQ questions for skills assessment
+- `POST /api/mcq/validate` - Validate question quality
+- `POST /api/mcq/detect-duplicates` - Detect duplicate questions
+- `GET /api/mcq/supported-skills` - Get list of supported skills
+- `GET /api/mcq/batch-generate` - Generate questions for multiple skills
+
 ## Development
 
 ### Running Tests
@@ -88,4 +95,16 @@ pytest
 - Resume parsing using Google's Gemini AI
 - Resume to Job Description matching
 - Developer profile aggregation from GitHub and LeetCode
+- **AI-powered MCQ generation engine** for skills assessment
 - API for integrating with frontend applications
+
+### MCQ Generation Engine
+
+The AI-powered MCQ generation engine creates relevant multiple-choice questions for:
+- **Technical skills**: Python, JavaScript, React, AWS, etc.
+- **Soft skills**: Leadership, Communication, Teamwork, etc.
+- **Different question types**: Technical, scenario-based, code-based
+- **Multiple difficulty levels**: Beginner, intermediate, advanced
+- **Multi-language support**: Generate questions in different languages
+
+See [MCQ Generation Documentation](docs/MCQ_GENERATION.md) for detailed usage.

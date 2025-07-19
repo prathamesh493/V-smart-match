@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation"
 import { Briefcase, Building2, Calendar, FileText, Search, Users, AlertCircle } from "lucide-react"
 import Header from "@/components/Header"
 import { useAuth } from "@/lib/useAuth"
+import { useApiClient } from "@/lib/clientApiClient"
 import Link from "next/link"
 import CompanyNavBar from '@/components/CompanyNavBar';
-
-// Get API base URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function JobListings() {
   const [jobListings, setJobListings] = useState([])
@@ -17,6 +15,7 @@ export default function JobListings() {
   const [error, setError] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const { user } = useAuth()
+  const api = useApiClient(user)
   const router = useRouter()
 
   useEffect(() => {
@@ -36,18 +35,12 @@ export default function JobListings() {
     setError("")
 
     try {
-      const response = await fetch(`${API_URL}/api/job-description/user/${user.uid}`)
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch job listings")
-      }
-
-      const data = await response.json()
-      console.log("Job Listings:", data) // Debugging line
-      setJobListings(data)
+      const response = await api.get(`/api/job-description/user/${user.uid}`)
+      console.log("Job Listings:", response.data) // Debugging line
+      setJobListings(response.data)
     } catch (error) {
       console.error("Error fetching job listings:", error)
-      setError("Failed to load job listings. Please try again.")
+      setError(error.userMessage || "Failed to load job listings. Please try again.")
     } finally {
       setIsLoading(false)
     }

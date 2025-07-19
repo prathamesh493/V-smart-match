@@ -5,15 +5,13 @@ import Header from "../../../components/Header"
 import { Upload, Github, Code2, CheckCircle2, Brain, Trophy } from 'lucide-react'
 import Notification from "../../../components/Notification"
 import { ProfileCompletion } from "../../../components/ProfileCompletion"
-import axios from "axios"
 import { useAuth } from "../../../lib/useAuth"
+import { useApiClient } from "../../../lib/clientApiClient"
 import { useRouter } from 'next/navigation'
-
-// Get API base URL from environment variable
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function CandidateProfile() {
   const { user, loading: authLoading } = useAuth() // Use authentication hook
+  const api = useApiClient(user) // Use centralized API client
   const router = useRouter() // Add router for redirects
   const [formData, setFormData] = useState({
     resume: null,
@@ -49,15 +47,8 @@ export default function CandidateProfile() {
     setApiConnectionError(false)
     
     try {
-      // Get auth token
-      const token = await user.getIdToken()
-      
-      // Fetch unified candidate profile from backend with auth token
-      const response = await axios.get(`${API_BASE_URL}/api/candidate/profile/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      // Fetch unified candidate profile from backend with automatic auth token
+      const response = await api.get(`/api/candidate/profile/${userId}`)
       console.log('Profile data received:', response.data)
       
       const profileData = response.data
@@ -82,7 +73,7 @@ export default function CandidateProfile() {
     } catch (error) {
       console.error('Error fetching candidate profile:', error)
       
-      if (error.message && error.message.includes('Network Error')) {
+      if (error.userMessage && error.userMessage.includes('Network error')) {
         setApiConnectionError(true)
       } else if (error.response?.status === 404) {
         // No profile found - this is okay for new users
@@ -90,7 +81,7 @@ export default function CandidateProfile() {
       } else {
         setNotification({
           type: 'error',
-          message: 'Error loading profile. Please try again later.'
+          message: error.userMessage || 'Error loading profile. Please try again later.'
         })
       }
     } finally {
@@ -151,26 +142,12 @@ export default function CandidateProfile() {
       setIsLoading(true);
       setUploadProgress(0);
       
-      // Get auth token
-      const token = await user.getIdToken();
+      const onUploadProgress = (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setUploadProgress(percentCompleted);
+      };
       
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await axios.post(
-        `${API_BASE_URL}/api/resume/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(percentCompleted);
-          }
-        }
-      );
+      const response = await api.uploadFile('/api/resume/upload', file, onUploadProgress);
       
       console.log("Resume upload response:", response.data);
       setNotification({
@@ -184,7 +161,7 @@ export default function CandidateProfile() {
       console.error("Error uploading resume:", error);
       setNotification({
         type: 'error',
-        message: error.response?.data?.detail || 'Failed to upload resume. Please try again.'
+        message: error.userMessage || 'Failed to upload resume. Please try again.'
       });
       return null;
     } finally {
@@ -268,23 +245,13 @@ export default function CandidateProfile() {
     setIsExtracting(true);
     
     try {
-      // Get auth token
-      const token = await user.getIdToken();
-      
       // Extract GitHub username from URL or use as is
       const githubUsername = extractGitHubUsername(formData.github);
       
       console.log('Extracting GitHub profile for:', githubUsername);
       
       // Call the correct GitHub API endpoint
-      const response = await axios.get(
-        `${API_BASE_URL}/api/github/${githubUsername}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      const response = await api.get(`/api/github/${githubUsername}`);
       
       setNotification({
         type: 'success',
@@ -317,24 +284,16 @@ export default function CandidateProfile() {
     setIsExtracting(true);
     
     try {
-      // Get auth token
-      const token = await user.getIdToken();
-      
       // Extract LeetCode username from URL or use as is
       const leetcodeUsername = extractLeetCodeUsername(formData.leetcode);
       
       console.log('Extracting LeetCode profile for:', leetcodeUsername);
       
       // Call backend API to extract LeetCode profile with authentication
-      const response = await axios.post(
-        `${API_BASE_URL}/api/candidate/link-profiles`, 
+      const response = await api.post(
+        '/api/candidate/link-profiles', 
         { 
           leetcode_username: leetcodeUsername 
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
         }
       );
       
@@ -350,7 +309,7 @@ export default function CandidateProfile() {
       console.error('Error extracting LeetCode profile:', error);
       setNotification({
         type: 'error',
-        message: error.response?.data?.message || 'Error linking LeetCode profile. Please try again.'
+        message: error.userMessage || 'Error linking LeetCode profile. Please try again.'
       });
     } finally {
       setIsExtracting(false);
@@ -387,20 +346,12 @@ export default function CandidateProfile() {
       // Step 2: Link profiles
       if (githubUsername || leetcodeUsername || resumeId) {
         try {
-          // Get auth token
-          const token = await user.getIdToken();
-          
-          const linkResponse = await axios.post(
-            `${API_BASE_URL}/api/candidate/link-profiles`,
+          const linkResponse = await api.post(
+            '/api/candidate/link-profiles',
             {
               github_username: githubUsername || null,
               leetcode_username: leetcodeUsername || null,
               resume_id: resumeId || null
-            },
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
             }
           );
           

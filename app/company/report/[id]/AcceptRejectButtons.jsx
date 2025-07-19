@@ -3,14 +3,15 @@
 "use client"
 import { useState, useTransition, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-
-// Get API base URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { useAuth } from "@/lib/useAuth"
+import { useApiClient } from "@/lib/clientApiClient"
 
 export default function AcceptRejectButtons({ matchId, initialSelection }) {
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState(initialSelection || null);
   const [error, setError] = useState(null);
+  const { user } = useAuth();
+  const api = useApiClient(user);
 
   useEffect(() => {
     setStatus(initialSelection || null);
@@ -21,15 +22,10 @@ export default function AcceptRejectButtons({ matchId, initialSelection }) {
     setError(null);
     startTransition(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/match/${matchId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ selection }),
-        });
-        if (!res.ok) throw new Error('Failed to update selection');
+        await api.patch(`/api/match/${matchId}`, { selection });
         setStatus(selection);
       } catch (err) {
-        setError(err.message || 'Error updating selection');
+        setError(err.userMessage || 'Error updating selection');
       }
     });
   };

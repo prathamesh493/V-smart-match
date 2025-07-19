@@ -6,6 +6,7 @@ import Header from '../../../components/Header';
 import { signOut } from 'firebase/auth';
 import { Search, Briefcase, CheckCircle, Star, Trophy, Zap, Building2 } from 'lucide-react';
 import { useAuth } from '../../../lib/useAuth'; // Adjust path to useAuth.js
+import { useApiClient } from '../../../lib/clientApiClient';
 
 export default function CandidateDashboard() {
   const [jobs, setJobs] = useState([]);
@@ -13,6 +14,7 @@ export default function CandidateDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all');
   const { user, loading } = useAuth(); // Get user and loading state
+  const api = useApiClient(user);
   const router = useRouter();
 
   // Redirect unauthenticated users to sign-in

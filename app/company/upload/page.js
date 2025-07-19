@@ -5,12 +5,12 @@ import { FileText, Briefcase, Users, Info, Upload, Building } from "lucide-react
 import Header from "@/components/Header"
 import CompanyNavBar from '@/components/CompanyNavBar';
 import { useAuth } from "@/lib/useAuth"
+import { useApiClient } from "@/lib/clientApiClient"
 import { useRouter } from "next/navigation"
 
-// Get API base URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
 export default function JobListingUpload() {
+  const { user } = useAuth()
+  const api = useApiClient(user)
   const [title, setTitle] = useState("")
   const [numMatches, setNumMatches] = useState(10)
   const [description, setDescription] = useState("")
@@ -24,7 +24,6 @@ export default function JobListingUpload() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
   const dropdownRef = useRef(null)
-  const { user } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -153,22 +152,18 @@ export default function JobListingUpload() {
 
       formData.append("num_matches", numMatches)
 
-      // Make API call to upload job description
-      const response = await fetch(`${API_URL}/api/job-description/upload`, {
-        method: "POST",
-        body: formData,
+      // Make API call to upload job description with automatic auth
+      const response = await api.client.post("/api/job-description/upload", formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || "Failed to upload job listing")
-      }
 
       // Redirect to listings page on success
       router.push("/company/listing")
     } catch (error) {
       console.error("Error uploading job listing:", error)
-      setError(error.message || "Failed to upload job listing. Please try again.")
+      setError(error.userMessage || "Failed to upload job listing. Please try again.")
     } finally {
       setIsSubmitting(false)
     }

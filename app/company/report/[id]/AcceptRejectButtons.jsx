@@ -4,6 +4,9 @@
 import { useState, useTransition, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 
+// Get API base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function AcceptRejectButtons({ matchId, initialSelection }) {
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState(initialSelection || null);
@@ -18,7 +21,7 @@ export default function AcceptRejectButtons({ matchId, initialSelection }) {
     setError(null);
     startTransition(async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/match/${matchId}`, {
+        const res = await fetch(`${API_URL}/api/match/${matchId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ selection }),

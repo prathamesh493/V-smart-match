@@ -7,6 +7,9 @@ import CompanyNavBar from '@/components/CompanyNavBar';
 import { useAuth } from "@/lib/useAuth"
 import { useRouter } from "next/navigation"
 
+// Get API base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function JobListingUpload() {
   const [title, setTitle] = useState("")
   const [numMatches, setNumMatches] = useState(10)
@@ -151,7 +154,7 @@ export default function JobListingUpload() {
       formData.append("num_matches", numMatches)
 
       // Make API call to upload job description
-      const response = await fetch("http://localhost:8000/api/job-description/upload", {
+      const response = await fetch(`${API_URL}/api/job-description/upload`, {
         method: "POST",
         body: formData,
       })

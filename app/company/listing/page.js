@@ -8,6 +8,9 @@ import { useAuth } from "@/lib/useAuth"
 import Link from "next/link"
 import CompanyNavBar from '@/components/CompanyNavBar';
 
+// Get API base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function JobListings() {
   const [jobListings, setJobListings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -33,7 +36,7 @@ export default function JobListings() {
     setError("")
 
     try {
-      const response = await fetch(`http://localhost:8000/api/job-description/user/${user.uid}`)
+      const response = await fetch(`${API_URL}/api/job-description/user/${user.uid}`)
 
       if (!response.ok) {
         throw new Error("Failed to fetch job listings")

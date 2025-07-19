@@ -11,9 +11,12 @@ import AcceptRejectButtons from "./AcceptRejectButtons"
 import CompanyNavBarClientWrapper from './CompanyNavBarClientWrapper';
 import ReactMarkdown from 'react-markdown';
 
+// Get API base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 async function getMatchReport(id) {
   try {
-    const response = await fetch(`http://localhost:8000/api/match/${id}`, { cache: "no-store" })
+    const response = await fetch(`${API_URL}/api/match/${id}`, { cache: "no-store" })
     if (!response.ok) {
       throw new Error("Failed to fetch report data")
     }
@@ -29,7 +32,7 @@ async function getMatchReport(id) {
 // Fetches the full Job Description object
 async function getJobDescriptionData(jdId) {
   try {
-    const response = await fetch(`http://localhost:8000/api/job-description/${jdId}`, { cache: "no-store" })
+    const response = await fetch(`${API_URL}/api/job-description/${jdId}`, { cache: "no-store" })
     if (!response.ok) {
       throw new Error("Failed to fetch job description")
     }
@@ -43,7 +46,7 @@ async function getJobDescriptionData(jdId) {
 
 async function getCandidateResume(candidateId) {
   try {
-    const response = await fetch(`http://localhost:8000/api/resume/${candidateId}`, { cache: "no-store" })
+    const response = await fetch(`${API_URL}/api/resume/${candidateId}`, { cache: "no-store" })
     if (!response.ok) {
       throw new Error("Failed to fetch candidate resume")
     }
@@ -58,7 +61,7 @@ async function getCandidateResume(candidateId) {
 async function getOtherMatches(candidateId, recruiterId, currentMatchId) {
   if (!candidateId || !recruiterId || !currentMatchId) return [];
   try {
-    const apiUrl = `http://localhost:8000/api/match/by-recruiter/other-matches?candidate_id=${candidateId}&recruiter_id=${recruiterId}&current_match_id=${currentMatchId}`;
+    const apiUrl = `${API_URL}/api/match/by-recruiter/other-matches?candidate_id=${candidateId}&recruiter_id=${recruiterId}&current_match_id=${currentMatchId}`;
     const response = await fetch(apiUrl, { cache: "no-store" });
     if (!response.ok) {
       console.error("Failed to fetch other matches, status:", response.status);

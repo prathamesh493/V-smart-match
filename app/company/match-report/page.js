@@ -7,6 +7,9 @@ import Header from "@/components/Header"
 import Link from "next/link"
 import { useAuth } from "@/lib/useAuth"
 
+// Get API base URL from environment variable
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function MatchReport() {
   const [jobDetails, setJobDetails] = useState(null)
   const [error, setError] = useState("")
@@ -52,7 +55,7 @@ export default function MatchReport() {
     try {
       // Fetch job details only on the first load
       if (isNewSearch) {
-        const jobResponse = await fetch(`http://localhost:8000/api/job-description/${jobId}`)
+        const jobResponse = await fetch(`${API_URL}/api/job-description/${jobId}`)
         if (!jobResponse.ok) throw new Error("Failed to fetch job details")
         const jobData = await jobResponse.json()
         setJobDetails(jobData)
@@ -70,7 +73,7 @@ export default function MatchReport() {
         params.append('start_after', lastId);
       }
 
-      const matchesResponse = await fetch(`http://localhost:8000/api/match/job/${jobId}?${params.toString()}`)
+      const matchesResponse = await fetch(`${API_URL}/api/match/job/${jobId}?${params.toString()}`)
       if (!matchesResponse.ok) throw new Error("Failed to fetch candidate matches")
       
       const newMatches = await matchesResponse.json();
@@ -126,7 +129,7 @@ export default function MatchReport() {
       const newDetails = { ...candidateDetails };
       await Promise.all(idsToFetch.map(async (id) => {
         try {
-          const res = await fetch(`http://localhost:8000/api/candidate/basic-info/${id}`);
+          const res = await fetch(`${API_URL}/api/candidate/basic-info/${id}`);
           if (res.ok) {
             newDetails[id] = await res.json();
           } else {

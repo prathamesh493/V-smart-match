@@ -10,7 +10,7 @@ import { useAuth } from "../../../lib/useAuth"
 import { useRouter } from 'next/navigation'
 
 // Get API base URL from environment variable
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function CandidateProfile() {
   const { user, loading: authLoading } = useAuth() // Use authentication hook

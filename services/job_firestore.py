@@ -1,20 +1,40 @@
 import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+import logging
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 from app.config import FIREBASE_CREDENTIALS_PATH
+
+logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK if not already initialized
 try:
     # Use existing app if initialized
     firebase_admin.get_app()
 except ValueError:
-    # Initialize app if not already done
-    cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-    firebase_admin.initialize_app(cred)
+    try:
+        # Only initialize if we have real credentials
+        if os.path.exists(FIREBASE_CREDENTIALS_PATH) and FIREBASE_CREDENTIALS_PATH != "firebase-credentials.json":
+            cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+            firebase_admin.initialize_app(cred)
+        else:
+            logger.warning("Firebase credentials not found or using dummy credentials. Firebase services disabled.")
+            firebase_admin = None
+    except Exception as e:
+        logger.warning(f"Failed to initialize Firebase: {e}. Firebase services disabled.")
+        firebase_admin = None
 
-db = firestore.client()
+# Initialize Firestore client
+if firebase_admin:
+    try:
+        db = firestore.client()
+    except Exception as e:
+        logger.warning(f"Failed to initialize Firestore client: {e}")
+        db = None
+else:
+    db = None
 
 async def store_job_description_data(
     user_id: str,

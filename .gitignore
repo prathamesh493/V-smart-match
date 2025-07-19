@@ -47,3 +47,6 @@ site/
 .ipynb_checkpoints
 
 firebase-credentials.json
+
+# Testing files (dummy credentials for testing only)
+.env

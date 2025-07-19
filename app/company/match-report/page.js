@@ -6,9 +6,7 @@ import { UserCircle, AlertCircle, Search, ArrowLeft } from "lucide-react"
 import Header from "@/components/Header"
 import Link from "next/link"
 import { useAuth } from "@/lib/useAuth"
-
-// Get API base URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { useApiClient } from "@/lib/clientApiClient"
 
 export default function MatchReport() {
   const [jobDetails, setJobDetails] = useState(null)
@@ -18,6 +16,7 @@ export default function MatchReport() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
+  const api = useApiClient(user)
   const jobId = searchParams.get("jobId")
   const csvLinkRef = useRef(null);
 
@@ -55,10 +54,8 @@ export default function MatchReport() {
     try {
       // Fetch job details only on the first load
       if (isNewSearch) {
-        const jobResponse = await fetch(`${API_URL}/api/job-description/${jobId}`)
-        if (!jobResponse.ok) throw new Error("Failed to fetch job details")
-        const jobData = await jobResponse.json()
-        setJobDetails(jobData)
+        const jobResponse = await api.get(`/api/job-description/${jobId}`)
+        setJobDetails(jobResponse.data)
       }
 
       // Construct the API URL with filtering and pagination parameters
@@ -73,10 +70,8 @@ export default function MatchReport() {
         params.append('start_after', lastId);
       }
 
-      const matchesResponse = await fetch(`${API_URL}/api/match/job/${jobId}?${params.toString()}`)
-      if (!matchesResponse.ok) throw new Error("Failed to fetch candidate matches")
-      
-      const newMatches = await matchesResponse.json();
+      const matchesResponse = await api.get(`/api/match/job/${jobId}?${params.toString()}`)
+      const newMatches = matchesResponse.data;
 
       // Append new matches to the existing list or set a new list
       setCandidates(prev => isNewSearch ? newMatches : [...prev, ...newMatches]);
@@ -90,7 +85,7 @@ export default function MatchReport() {
       }
     } catch (error) {
       console.error("Error fetching data:", error)
-      setError(error.message || "Failed to load data")
+      setError(error.userMessage || "Failed to load data")
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -129,12 +124,8 @@ export default function MatchReport() {
       const newDetails = { ...candidateDetails };
       await Promise.all(idsToFetch.map(async (id) => {
         try {
-          const res = await fetch(`${API_URL}/api/candidate/basic-info/${id}`);
-          if (res.ok) {
-            newDetails[id] = await res.json();
-          } else {
-            newDetails[id] = { full_name: 'Name not found', email: '' };
-          }
+          const res = await api.get(`/api/candidate/basic-info/${id}`);
+          newDetails[id] = res.data;
         } catch (e) {
           newDetails[id] = { full_name: 'Error loading name', email: '' };
         }

@@ -14,7 +14,7 @@ sys.path.insert(0, str(project_root))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import health, resume, match, profile, job_description, candidate, github
+from api.routes import health, resume, match, profile, job_description, candidate, github, mcq, chatbot
 
 app = FastAPI(
     title="VSmart API",
@@ -46,6 +46,8 @@ app.include_router(match.router, prefix="/api", tags=["match"])
 app.include_router(profile.router, prefix="/api", tags=["profile"])
 app.include_router(candidate.router, prefix="/api", tags=["candidate"])
 app.include_router(github.router, prefix="/api", tags=["github"])
+app.include_router(mcq.router, prefix="/api", tags=["mcq"])
+app.include_router(chatbot.router, prefix="/api", tags=["chatbot"])
 
 if __name__ == "__main__":
     import uvicorn

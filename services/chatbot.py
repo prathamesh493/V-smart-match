@@ -125,17 +125,27 @@ class ChatbotService:
             
             # Find the question
             question_data = None
-            for q in session["questions"]:
-                if q["id"] == question_id:
+            questions = session["questions"]
+            logger.info(f"Looking for question {question_id} in {len(questions)} questions")
+            
+            for i, q in enumerate(questions):
+                logger.info(f"Question {i}: type={type(q)}, data={q}")
+                if isinstance(q, dict) and q.get("id") == question_id:
                     question_data = q
                     break
+                elif isinstance(q, list):
+                    logger.error(f"Question {i} is a list instead of dict: {q}")
+                    # If it's a list, check if the first element is our question
+                    if len(q) > 0 and isinstance(q[0], dict) and q[0].get("id") == question_id:
+                        question_data = q[0]
+                        break
             
             if not question_data:
                 raise Exception("Question not found in session")
             
             # Check answer
             is_correct = self._check_answer(question_data, answer)
-            correct_answer = question_data.get("correct_answer")
+            correct_answer = question_data.get("correct_answer") if isinstance(question_data, dict) else None
             
             # Record the answer
             await self.session_manager.record_answer(
@@ -386,6 +396,10 @@ class ChatbotService:
     
     def _check_answer(self, question_data: Dict[str, Any], user_answer: str) -> bool:
         """Check if user's answer is correct"""
+        if not isinstance(question_data, dict):
+            logger.error(f"question_data is not a dict: {type(question_data)} - {question_data}")
+            return False
+            
         correct_answer = question_data.get("correct_answer")
         if not correct_answer:
             return False

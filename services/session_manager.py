@@ -177,7 +177,9 @@ class SessionManager:
             if not session:
                 return False
             
-            session["questions"].append(question.dict())
+            question_dict = question.dict()
+            logger.info(f"Adding question to session {session_id}: {question_dict}")
+            session["questions"].append(question_dict)
             await self.update_session(session_id, {
                 "questions": session["questions"]
             })
@@ -409,11 +411,32 @@ class SessionManager:
                     deserialized[key] = datetime.fromisoformat(value)
                 except:
                     deserialized[key] = value
-            elif key in ["questions", "answers", "conversation_history", "skills"] and isinstance(value, str):
-                try:
-                    deserialized[key] = json.loads(value)
-                except:
-                    deserialized[key] = value if isinstance(value, list) else []
+            elif key in ["questions", "answers", "conversation_history", "skills"]:
+                if isinstance(value, str):
+                    try:
+                        parsed_value = json.loads(value)
+                        # Handle case where questions might be double-nested
+                        if key == "questions" and isinstance(parsed_value, list):
+                            # Ensure each question is a dict, not a nested list
+                            fixed_questions = []
+                            for q in parsed_value:
+                                if isinstance(q, dict):
+                                    fixed_questions.append(q)
+                                elif isinstance(q, list) and len(q) > 0 and isinstance(q[0], dict):
+                                    # If question is wrapped in a list, unwrap it
+                                    fixed_questions.append(q[0])
+                                else:
+                                    logger.warning(f"Unexpected question format: {type(q)} - {q}")
+                            deserialized[key] = fixed_questions
+                        else:
+                            deserialized[key] = parsed_value
+                    except:
+                        logger.error(f"Failed to deserialize {key}: {value}")
+                        deserialized[key] = []
+                elif isinstance(value, list):
+                    deserialized[key] = value
+                else:
+                    deserialized[key] = []
             else:
                 deserialized[key] = value
         return deserialized

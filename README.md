@@ -90,6 +90,42 @@ vsmart-backend/
 pytest
 ```
 
+
+## Observability & Monitoring
+
+# 🚀 Instrumented Backend with OpenTelemetry, Jaeger, and Prometheus
+
+This project provides a backend web service instrumented with OpenTelemetry. It includes a full local observability stack with:
+
+- **Jaeger** — Distributed tracing UI
+- **Prometheus** — Metrics storage and query UI
+- **Otel Collector** — Telemetry pipeline and collector
+
+---
+
+## 🏗️ Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- [Docker Compose](https://docs.docker.com/compose/install/) (comes baked into Docker Desktop)
+- (Optional) Python 3.12+ and `pip` (if you want to run the backend locally, not in Docker)
+
+
+2. **Start the full stack**
+
+    ```
+    docker-compose down  # clear any previous run
+    docker-compose up --build
+    ```
+
+    *Wait ~30 seconds for all services to come up.*
+
+3. **Access the services:**
+
+    - **Backend API**: [http://localhost:8000](http://localhost:8000)
+    - **Jaeger UI (tracing)**: [http://localhost:16686](http://localhost:16686)
+    - **Prometheus UI (metrics)**: [http://localhost:9090](http://localhost:9090)
+
+
 ## Features
 
 - Resume parsing using Google's Gemini AI

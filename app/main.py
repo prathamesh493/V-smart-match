@@ -3,18 +3,23 @@ from dotenv import load_dotenv
 load_dotenv() # This line loads the variables from your .env file
 # --- END OF FIX ---
 
-import sys
-import os
-from pathlib import Path
-
-# Add the project root to the Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from starlette_prometheus import PrometheusMiddleware, metrics
+import structlog
+
+from app.observability.logging_config import setup_logging
+from app.observability.tracing import setup_tracing
 
 from api.routes import health, resume, match, profile, job_description, candidate, github, mcq, chatbot
+
+setup_logging()
+setup_tracing()
+
+logger = structlog.get_logger(__name__)
 
 app = FastAPI(
     title="VSmart API",
@@ -22,23 +27,21 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Add CORS middleware with configuration for WSL environment
 app.add_middleware(
     CORSMiddleware,
-    # Allow requests from frontend running in WSL or Windows
-    allow_origins=[
-        "http://mj.local:3000",  # Local development 
-        "http://127.0.0.1:3000",  # Alternative local
-        "http://mj.local:3000",  # WSL IP
-        "http://192.168.0.104:3000",  # Network IP (if needed)
-        "*",  # For development, remove in production
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+app.add_middleware(PrometheusMiddleware)
+app.add_route("/metrics", metrics)
+
+FastAPIInstrumentor.instrument_app(app)
+RequestsInstrumentor().instrument()
+
+# Routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(resume.router, prefix="/api", tags=["resume"])
 app.include_router(job_description.router, prefix="/api", tags=["job_description"])
@@ -51,5 +54,4 @@ app.include_router(chatbot.router, prefix="/api", tags=["chatbot"])
 
 if __name__ == "__main__":
     import uvicorn
-    # Important: Use 0.0.0.0 to bind to all interfaces, making the API accessible from Windows
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

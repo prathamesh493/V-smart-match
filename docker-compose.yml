@@ -4,7 +4,7 @@ services:
   backend:
     build: .
     container_name: vsmart-backend
-    
+
     # --- FIX 1: Run container with your host user's ID ---
     # This aligns container permissions with the mounted volume's permissions,
     # solving the "Permission denied" error.
@@ -14,16 +14,38 @@ services:
       - "8000:8000"
     environment:
       - HF_HOME=/app/huggingface_cache
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
     volumes:
-      # Mounts the project root for live code reloading
+      # Mount code for hot-reloading
       - .:/app
-      # Mounts a named volume for a persistent Hugging Face cache
+      # Mount a named volume for persistent Hugging Face cache
       - hf_cache:/app/huggingface_cache
-
-    # --- FIX 2: Use the CMD from Dockerfile, or override for development ---
-    # The command is now set for development with hot-reloading.
-    # Uvicorn will automatically restart when you save code changes.
+      
+    depends_on:
+      - jaeger
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    environment:
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://prometheus:9090
+      - PROMETHEUS_ENDPOINT=0.0.0.0:8889
+      - PROMETHEUS_QUERY_NORMALIZE_CALLS=true
+      - PROMETHEUS_QUERY_NORMALIZE_DURATION=true
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317"   # OTLP gRPC port
+      - "8889:8889"   # Prometheus metrics
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
 
 volumes:
   hf_cache:

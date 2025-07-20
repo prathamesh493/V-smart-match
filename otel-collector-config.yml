@@ -1,0 +1,35 @@
+# otel-collector-config.yml
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317 # Receives traces from your FastAPI app
+
+processors:
+  batch:
+  spanmetrics:
+    metrics_exporter: prometheus # Tells the connector to export to a prometheus exporter
+    latency_histogram_buckets: [100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+
+exporters:
+  # Exporter 1: For Prometheus to scrape
+  prometheus:
+    endpoint: 0.0.0.0:8889 # Exposes metrics for Prometheus
+
+  # Exporter 2: For sending traces to Jaeger for visualization
+  jaeger:
+    endpoint: jaeger:14250 # Sends traces to the Jaeger container
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, spanmetrics] # The magic pipeline: process spans, then send to Jaeger
+      exporters: [jaeger]
+    metrics:
+      receivers: [spanmetrics] # Receives metrics FROM the spanmetrics processor
+      processors: [batch]
+      exporters: [prometheus] # Exports those metrics for Prometheus to scrape

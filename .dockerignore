@@ -2,3 +2,21 @@
 venv/
 env/
 ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore IDE and OS-specific files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Ignore git files
+.git
+.gitignore
+
+# Ignore test files and sample data if not needed in production
+tests/
+sample_jd/

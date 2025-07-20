@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: vsmart-backend
+    
+    # --- FIX 1: Run container with your host user's ID ---
+    # This aligns container permissions with the mounted volume's permissions,
+    # solving the "Permission denied" error.
+    user: "${UID}:${GID}"
+
+    ports:
+      - "8000:8000"
+    environment:
+      - HF_HOME=/app/huggingface_cache
+    volumes:
+      # Mounts the project root for live code reloading
+      - .:/app
+      # Mounts a named volume for a persistent Hugging Face cache
+      - hf_cache:/app/huggingface_cache
+
+    # --- FIX 2: Use the CMD from Dockerfile, or override for development ---
+    # The command is now set for development with hot-reloading.
+    # Uvicorn will automatically restart when you save code changes.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  hf_cache:

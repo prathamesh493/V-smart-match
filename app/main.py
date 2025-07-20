@@ -1,3 +1,8 @@
+# --- START OF FIX ---
+from dotenv import load_dotenv
+load_dotenv() # This line loads the variables from your .env file
+# --- END OF FIX ---
+
 import sys
 import os
 from pathlib import Path

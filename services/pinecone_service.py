@@ -1,9 +1,11 @@
 # service/pinecone_service.py
 
 import os
+from dotenv import load_dotenv
 from pinecone import Pinecone
 from typing import List, Dict, Any
 
+load_dotenv()
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 # Initialize Pinecone only if API key is available

@@ -4,32 +4,37 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317 # Receives traces from your FastAPI app
+        endpoint: 0.0.0.0:4317
 
 processors:
-  batch:
-  spanmetrics:
-    metrics_exporter: prometheus # Tells the connector to export to a prometheus exporter
-    latency_histogram_buckets: [100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+  batch: {}
 
 exporters:
-  # Exporter 1: For Prometheus to scrape
   prometheus:
-    endpoint: 0.0.0.0:8889 # Exposes metrics for Prometheus
-
-  # Exporter 2: For sending traces to Jaeger for visualization
-  jaeger:
-    endpoint: jaeger:14250 # Sends traces to the Jaeger container
+    endpoint: "0.0.0.0:8889"
+  otlp/jaeger:
+    endpoint: jaeger:4317
     tls:
       insecure: true
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+    dimensions:
+      - name: http.method
+        default: GET
+      - name: http.status_code
+    metrics_flush_interval: 15s
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch, spanmetrics] # The magic pipeline: process spans, then send to Jaeger
-      exporters: [jaeger]
-    metrics:
-      receivers: [spanmetrics] # Receives metrics FROM the spanmetrics processor
       processors: [batch]
-      exporters: [prometheus] # Exports those metrics for Prometheus to scrape
+      exporters: [otlp/jaeger, spanmetrics]
+    metrics:
+      receivers: [spanmetrics]
+      processors: [batch]
+      exporters: [prometheus]

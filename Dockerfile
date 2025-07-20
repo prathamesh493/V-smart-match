@@ -8,10 +8,14 @@ WORKDIR /app
 # Upgrade pip
 RUN pip install --upgrade pip
 
-# Copy and install requirements
-# This leverages layer caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 5. Copy ONLY the requirements file first to leverage Docker layer caching
+# COPY requirements.txt .
+COPY requirements_mac.txt .
+
+
+# 6. Install Python dependencies
+# RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements_mac.txt
 
 
 # --- Stage 2: Final/Production Stage ---

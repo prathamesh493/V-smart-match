@@ -1,0 +1,13 @@
+# prometheus-rules.yml
+
+groups:
+  - name: jaeger-spanmetrics-alias
+    rules:
+      - record: service_latency_bucket
+        expr: spanmetrics_latency_bucket
+      - record: service_latency_sum
+        expr: spanmetrics_latency_sum
+      - record: service_latency_count
+        expr: spanmetrics_latency_count
+      - record: service_calls_total
+        expr: spanmetrics_calls_total

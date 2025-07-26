@@ -1,19 +1,39 @@
+import os
 import json
 import time
 import uuid
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from app.config import GEMINI_API_KEY
-import google.generativeai as genai
+# LangChain imports
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langsmith import traceable
+
+from app.config import GEMINI_API_KEY, GEMINI_MODEL
 from prompts.matcher import JOB_MATCHING_ANALYSIS_PROMPT
 
-# Initialize Gemini with your API key
-genai.configure(api_key=GEMINI_API_KEY)
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Configure LangSmith if enabled
+LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "vsmart-job-matching")
+LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "true").lower() == "true"
+
+if LANGSMITH_TRACING and LANGSMITH_API_KEY:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = LANGSMITH_API_KEY
+    os.environ["LANGCHAIN_PROJECT"] = LANGSMITH_PROJECT
+    logger.info(f"LangSmith tracing enabled for project: {LANGSMITH_PROJECT}")
+else:
+    logger.info("LangSmith tracing disabled")
 
 class ResumeJobMatcher:
     """
-    Service for matching resumes to job descriptions using Gemini's AI capabilities.
+    Service for matching resumes to job descriptions using Gemini's AI capabilities via LangChain.
     """
     
     def __init__(self, model_name: str = "gemini-2.5-pro"):
@@ -24,8 +44,13 @@ class ResumeJobMatcher:
             model_name: The Gemini model to use for matching analysis
         """
         self.model_name = model_name
-        self.model = genai.GenerativeModel(model_name)
+        self.model = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0
+        )
         
+    @traceable(name="generate_match_analysis")
     async def generate_match_analysis(
         self, 
         candidate_id: str, 
@@ -86,6 +111,7 @@ class ResumeJobMatcher:
         
         return match_result
         
+    @traceable(name="analyze_match")
     async def _analyze_match(
         self, 
         resume_content: str, 
@@ -94,7 +120,7 @@ class ResumeJobMatcher:
         leetcode_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Use Gemini to analyze the match between resume and job description.
+        Use Gemini via LangChain to analyze the match between resume and job description.
         
         Args:
             resume_content: The text content of the resume
@@ -108,16 +134,30 @@ class ResumeJobMatcher:
         # Construct the prompt for Gemini
         prompt = self._build_analysis_prompt(resume_content, job_description_content, github_data, leetcode_data)
         
-        print("Prompt for Gemini:",prompt)
+        logger.info("Sending prompt to Gemini via LangChain for matching analysis")
         
-        # Send the prompt to Gemini
+        # Create HumanMessage for LangChain
+        message = HumanMessage(content=prompt)
+        
+        # Send the prompt to Gemini via LangChain
         try:
-            response = await self.model.generate_content_async(prompt)
+            # Add metadata for tracing
+            if LANGSMITH_TRACING:
+                from langsmith import trace
+                with trace(name="gemini_matching_api_call", metadata={
+                    "model": self.model_name,
+                    "prompt_length": len(prompt),
+                    "has_github_data": github_data is not None,
+                    "has_leetcode_data": leetcode_data is not None
+                }):
+                    response = await self.model.ainvoke([message])
+            else:
+                response = await self.model.ainvoke([message])
             
-            print("Gemini response:", response)
+            logger.info("Received response from LangChain Gemini for matching")
             
             # Extract the JSON from the response
-            analysis_text = response.text
+            analysis_text = response.content
             # Sometimes Gemini might wrap the JSON in markdown code blocks
             if "```json" in analysis_text:
                 analysis_text = analysis_text.split("```json")[1].split("```")[0].strip()
@@ -127,14 +167,11 @@ class ResumeJobMatcher:
             try:
                 analysis_result = json.loads(analysis_text)
                 
-                # Add token usage if available
-                if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                    # Input tokens
-                    analysis_result["promptTokens"] = response.usage_metadata.prompt_token_count
-                    # Output tokens[]
-                    analysis_result["completionTokens"] = response.usage_metadata.candidates_token_count
-                    # Total billed tokens
-                    analysis_result["totalTokens"] = response.usage_metadata.total_token_count
+                # For LangChain, we don't have direct access to usage metadata
+                # Set default values
+                analysis_result["promptTokens"] = 0  # Not directly available
+                analysis_result["completionTokens"] = 0  # Not directly available
+                analysis_result["totalTokens"] = 0  # Not directly available
                 
                 # Ensure all required fields exist
                 if "overallScore" not in analysis_result:
@@ -154,8 +191,8 @@ class ResumeJobMatcher:
                 return analysis_result
                 
             except json.JSONDecodeError as e:
-                print(f"Error parsing JSON from Gemini response: {str(e)}")
-                print(f"Response text: {analysis_text}")
+                logger.error(f"Error parsing JSON from LangChain Gemini response: {str(e)}")
+                logger.error(f"Response text: {analysis_text}")
                 
                 # Return a default structure
                 return {
@@ -168,7 +205,7 @@ class ResumeJobMatcher:
                         "culturalFitMatch": {"score": 50, "confidence": 50, "valueAlignmentScore": 50, "workStyleMatch": 50}
                     },
                     "analysis": {
-                        "summary": "Error parsing Gemini response",
+                        "summary": "Error parsing LangChain Gemini response",
                         "strengths": ["Unable to determine"],
                         "weaknesses": ["Unable to determine"],
                         "recommendations": ["Review manually"]
@@ -176,6 +213,7 @@ class ResumeJobMatcher:
                 }
             
         except Exception as e:
+            logger.error(f"Error during LangChain Gemini API call: {str(e)}")
             # Return a error-indicating result
             return {
                 "overallScore": 0,
@@ -195,6 +233,7 @@ class ResumeJobMatcher:
                 }
             }
     
+    @traceable(name="build_analysis_prompt")
     def _build_analysis_prompt(
         self, 
         resume_content: str, 
@@ -295,6 +334,7 @@ class ResumeJobMatcher:
         )
 
 # Function to get a single match between resume and job description
+@traceable(name="get_match")
 async def get_match(
     candidate_id: str, 
     job_description_id: str, 
@@ -323,6 +363,7 @@ async def get_match(
     )
 
 # Function to get matches for a single resume against multiple job descriptions
+@traceable(name="get_matches_for_resume")
 async def get_matches_for_resume(
     candidate_id: str, 
     resume_content: str, 
@@ -360,6 +401,7 @@ async def get_matches_for_resume(
     return results
 
 # Function to get matches for a single job description against multiple resumes
+@traceable(name="get_matches_for_job")
 async def get_matches_for_job(
     job_description_id: str, 
     job_description_content: str,

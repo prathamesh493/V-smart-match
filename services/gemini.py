@@ -7,11 +7,15 @@ from typing import Dict, Tuple, Any, List
 import logging
 from datetime import datetime
 
-# New imports for direct PDF and Gemini handling
-import google.generativeai as genai
+# New imports for LangChain and PDF handling
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langsmith import traceable
 import fitz  # PyMuPDF
 from PIL import Image
 import io
+import base64
 
 from app.config import GEMINI_API_KEY, GEMINI_MODEL
 from prompts.gemini import RESUME_EXTRACTION_PROMPT
@@ -19,10 +23,28 @@ from prompts.gemini import RESUME_EXTRACTION_PROMPT
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Configure the Gemini client
-genai.configure(api_key=GEMINI_API_KEY)
+# Configure LangSmith if enabled
+LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "vsmart-resume-extraction")
+LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "true").lower() == "true"
+
+if LANGSMITH_TRACING and LANGSMITH_API_KEY:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = LANGSMITH_API_KEY
+    os.environ["LANGCHAIN_PROJECT"] = LANGSMITH_PROJECT
+    logger.info(f"LangSmith tracing enabled for project: {LANGSMITH_PROJECT}")
+else:
+    logger.info("LangSmith tracing disabled")
+
+# Initialize LangChain Gemini model
+llm = ChatGoogleGenerativeAI(
+    model=GEMINI_MODEL,
+    google_api_key=GEMINI_API_KEY,
+    temperature=0
+)
 
 
+@traceable(name="convert_json_to_markdown")
 def convert_json_to_markdown(data: Dict[str, Any]) -> str:
     """Converts the parsed resume JSON into a clean markdown string. (No changes needed here)"""
     markdown_parts = []
@@ -92,6 +114,7 @@ def convert_json_to_markdown(data: Dict[str, Any]) -> str:
     return "\n\n".join(markdown_parts)
 
 
+@traceable(name="extract_pinecone_metadata")
 def extract_pinecone_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
     """Extracts key information from the JSON for Pinecone metadata. (No changes needed here)"""
     metadata = {}
@@ -112,6 +135,7 @@ def extract_pinecone_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in metadata.items() if v is not None and v}
 
 
+@traceable(name="get_pdf_image_parts")
 def get_pdf_image_parts(pdf_path: str) -> List[Image.Image]:
     """
     Opens a PDF file and converts each page to a PIL Image object.
@@ -131,45 +155,88 @@ def get_pdf_image_parts(pdf_path: str) -> List[Image.Image]:
         logger.error(f"Failed to convert PDF to images: {e}")
         raise
 
-async def extract_resume_json_with_gemini(pdf_path: str) -> Dict[str, Any]:
+@traceable(name="image_to_base64")
+def image_to_base64(image: Image.Image) -> str:
+    """Convert PIL Image to base64 string."""
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return img_str
+
+@traceable(name="extract_resume_json_with_gemini")
+async def extract_resume_json_with_gemini(pdf_path: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    Extracts resume content by sending PDF page images to Gemini Vision.
-    This function replaces the xerox-based extraction.
+    Extracts resume content by sending PDF page images to Gemini Vision using LangChain.
     
     Args:
         pdf_path: Path to the PDF file.
         
     Returns:
-        A dictionary containing the structured resume data.
+        A tuple containing:
+        - Dictionary with structured resume data
+        - Dictionary with usage metadata
     """
     # Use the centralized prompt for resume extraction
     system_prompt = RESUME_EXTRACTION_PROMPT
     
     try:
-        logger.info(f"Initializing Gemini model: {GEMINI_MODEL}")
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        logger.info(f"Using LangChain Gemini model: {GEMINI_MODEL}")
         
         logger.info(f"Converting PDF '{pdf_path}' to images...")
         image_parts = get_pdf_image_parts(pdf_path)
         
-        # Combine the text prompt with the list of page images
-        prompt_parts = [system_prompt] + image_parts
+        # Convert images to base64 for LangChain
+        image_data = []
+        for idx, image in enumerate(image_parts):
+            base64_image = image_to_base64(image)
+            image_data.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{base64_image}"
+                }
+            })
         
-        logger.info(f"Sending {len(image_parts)} pages to Gemini for processing...")
-        # Use generate_content_async for non-blocking I/O in FastAPI
-        response = await model.generate_content_async(prompt_parts)
-
-        print(f"\n\nReceived response from Gemini: {response}\n\n")
+        # Create message content with text and images
+        message_content = [{"type": "text", "text": system_prompt}] + image_data
         
-        json_string = response.text
-
-        usage_metadata_proto = response.usage_metadata
+        # Create HumanMessage with multimodal content
+        message = HumanMessage(content=message_content)
+        
+        logger.info(f"Sending {len(image_parts)} pages to Gemini for processing via LangChain...")
+        
+        # Add metadata for tracing
+        if LANGSMITH_TRACING:
+            # You can add custom metadata to the trace
+            from langsmith import trace
+            with trace(name="gemini_api_call", metadata={
+                "model": GEMINI_MODEL,
+                "pdf_path": pdf_path,
+                "num_pages": len(image_parts),
+                "prompt_length": len(system_prompt)
+            }):
+                # Use LangChain to invoke the model
+                response = await llm.ainvoke([message])
+        else:
+            # Use LangChain to invoke the model
+            response = await llm.ainvoke([message])
+        
+        logger.info(f"Received response from LangChain Gemini: {response}")
+        
+        json_string = response.content
+        
+        # For LangChain, we don't have direct access to usage metadata
+        # You might need to implement usage tracking separately if needed
         usage_metadata = {
-            "prompt_token_count": int(usage_metadata_proto.prompt_token_count),
-            "candidates_token_count": int(usage_metadata_proto.candidates_token_count),
-            "total_token_count": int(usage_metadata_proto.total_token_count)
+            "prompt_token_count": 0,  # Not directly available in LangChain
+            "candidates_token_count": 0,  # Not directly available in LangChain
+            "total_token_count": 0,  # Not directly available in LangChain
+            "provider": "langchain-google-genai",
+            "model": GEMINI_MODEL,
+            "langsmith_tracing_enabled": LANGSMITH_TRACING,
+            "langsmith_project": LANGSMITH_PROJECT if LANGSMITH_TRACING else None,
+            "num_pages_processed": len(image_parts)
         }
-        logger.info(f"Gemini API Usage: {usage_metadata}")
+        logger.info(f"Using LangChain - detailed usage metadata not available, but tracking: {usage_metadata}")
         
         # Clean up the string to ensure it's valid JSON
         if json_string.strip().startswith("```json"):
@@ -177,16 +244,17 @@ async def extract_resume_json_with_gemini(pdf_path: str) -> Dict[str, Any]:
         
         try:
             parsed_json = json.loads(json_string)
-            logger.info("Successfully parsed JSON response from Gemini.")
+            logger.info("Successfully parsed JSON response from LangChain Gemini.")
             return parsed_json, usage_metadata
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from Gemini. Raw output: {json_string}")
+            logger.error(f"Failed to parse JSON from LangChain Gemini. Raw output: {json_string}")
             raise Exception(f"JSON parsing failed: {e}. The model did not return valid JSON.")
 
     except Exception as e:
-        logger.error(f"Failed during Gemini API call: {str(e)}")
+        logger.error(f"Failed during LangChain Gemini API call: {str(e)}")
         raise
 
+@traceable(name="extract_resume_data")
 async def extract_resume_data(pdf_path: str) -> Tuple[Dict[str, Any], str, Dict[str, Any]]:
     """
     Orchestrates the new resume processing workflow.

@@ -353,18 +353,18 @@ async def get_candidate_dashboard(
                 recruiter_id=match_data.get("recruiterId", ""),
                 recruiter_name=recruiter_name,
                 overall_score=match_data.get("overallScore", 0),
-                status=match_data.get("status", "pending"),
+                status=match_data.get("selection", "pending"),
                 created_at=match_data.get("created_at"),
                 updated_at=match_data.get("updated_at"),
-                next_step_available=match_data.get("status") == "accepted",
+                next_step_available=match_data.get("selection") == "yes",
                 recruiter_notes=match_data.get("recruiter_notes")
             )
             
             # Categorize based on status
-            status = match_data.get("status", "pending")
-            if status == "accepted":
+            status = match_data.get("selection", "pending")
+            if status == "yes":
                 accepted_matches.append(match_status)
-            elif status == "rejected" and include_rejected:
+            elif status == "no" and include_rejected:
                 rejected_matches.append(match_status)
             else:
                 pending_matches.append(match_status)

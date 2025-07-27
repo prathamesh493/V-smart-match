@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/useAuth"
-import { FileText, Github, Code, GraduationCap, Award, Briefcase, ExternalLink, User } from "lucide-react"
+import { FileText, Github, Code, GraduationCap, Award, Briefcase, ExternalLink, User, ArrowLeft } from "lucide-react"
 import Header from "@/components/Header"
 import Link from "next/link"
 import ReactMarkdown from 'react-markdown'
@@ -144,6 +144,15 @@ export default function CandidateReport() {
     <div className="min-h-screen bg-gradient-to-br from-[#c6269e] to-[#4f46e5]">
       <Header />
       <main className="container mx-auto px-4 py-16">
+        {/* Back Button */}
+        <Link 
+          href="/candidate" 
+          className="inline-flex items-center text-white/90 hover:text-white mb-6 transition-colors group"
+        >
+          <ArrowLeft className="h-5 w-5 mr-2 transition-transform group-hover:-translate-x-1" />
+          Back to Dashboard
+        </Link>
+        
         <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-8 animate-fade-in-up">
           Your Professional Profile
         </h1>

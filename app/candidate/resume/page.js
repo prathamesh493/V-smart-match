@@ -3,12 +3,23 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import ResumeViewer from '@/components/ResumeViewer';
+import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 export default function CandidateResumePage() {
   const { currentUser, userProfile } = useAuth();
   
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Back Button */}
+      <Link 
+        href="/candidate" 
+        className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-6 transition-colors group"
+      >
+        <ArrowLeft className="h-5 w-5 mr-2 transition-transform group-hover:-translate-x-1" />
+        Back to Dashboard
+      </Link>
+      
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Your Resume</h1>
         <p className="text-gray-600 mt-2">

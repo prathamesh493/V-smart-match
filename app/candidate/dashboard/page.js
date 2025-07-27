@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import { signOut } from 'firebase/auth';
-import { Search, Briefcase, CheckCircle, Star, Trophy, Zap, Building2 } from 'lucide-react';
+import { Search, Briefcase, CheckCircle, Star, Trophy, Zap, Building2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../lib/useAuth'; // Adjust path to useAuth.js
 import { useApiClient } from '../../../lib/clientApiClient';
+import Link from 'next/link';
 
 export default function CandidateDashboard() {
   const [jobs, setJobs] = useState([]);
@@ -91,6 +92,15 @@ export default function CandidateDashboard() {
       <Header />
       <main className="container mx-auto px-4 py-16">
         <div className="max-w-6xl mx-auto">
+          {/* Back Button */}
+          <Link 
+            href="/candidate" 
+            className="inline-flex items-center text-white/90 hover:text-white mb-6 transition-colors group"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2 transition-transform group-hover:-translate-x-1" />
+            Back to Dashboard
+          </Link>
+          
           {/* Display user email or welcome message */}
           <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-4 animate-fade-in-up">
             Welcome, {user?.fullName || 'Candidate'}!

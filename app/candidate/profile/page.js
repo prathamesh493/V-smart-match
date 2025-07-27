@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import Header from "../../../components/Header"
-import { Upload, Github, Code2, CheckCircle2, Brain, Trophy } from 'lucide-react'
+import { Upload, Github, Code2, CheckCircle2, Brain, Trophy, ArrowLeft } from 'lucide-react'
 import Notification from "../../../components/Notification"
 import { ProfileCompletion } from "../../../components/ProfileCompletion"
 import { useAuth } from "../../../lib/useAuth"
 import { useApiClient } from "../../../lib/clientApiClient"
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function CandidateProfile() {
   const { user, loading: authLoading } = useAuth() // Use authentication hook
@@ -406,6 +407,15 @@ export default function CandidateProfile() {
       )}
       <main className="container mx-auto px-4 py-16">
         <div className="max-w-3xl mx-auto">
+          {/* Back Button */}
+          <Link 
+            href="/candidate" 
+            className="inline-flex items-center text-white/90 hover:text-white mb-6 transition-colors group"
+          >
+            <ArrowLeft className="h-5 w-5 mr-2 transition-transform group-hover:-translate-x-1" />
+            Back to Dashboard
+          </Link>
+          
           {/* Add the animation classes to the global styles in your app */}
           <style jsx global>{`
             @keyframes slideInRight {

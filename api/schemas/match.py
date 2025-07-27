@@ -1,6 +1,49 @@
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
+
+class MatchStatusUpdate(BaseModel):
+    """Schema for updating match status by recruiter"""
+    status: str = Field(..., description="Match status: accepted, rejected, or pending")
+    updated_by: str = Field(..., description="ID of the recruiter making the decision")
+    notes: Optional[str] = Field(None, description="Optional notes from recruiter")
+    updated_at: datetime = Field(default_factory=datetime.now)
+    
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ["accepted", "rejected", "pending"]:
+            raise ValueError("Status must be 'accepted', 'rejected', or 'pending'")
+        return v
+
+class CandidateMatchStatus(BaseModel):
+    """Schema for candidate match status in dashboard"""
+    match_id: str
+    job_title: str
+    company_name: Optional[str] = None
+    job_description_id: str
+    recruiter_id: str
+    recruiter_name: Optional[str] = None
+    overall_score: float = Field(..., ge=0, le=100)
+    status: str = Field(default="pending", description="Match status")
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    next_step_available: bool = False
+    recruiter_notes: Optional[str] = None
+
+class CandidateDashboardResponse(BaseModel):
+    """Schema for candidate dashboard response"""
+    accepted_matches: List[CandidateMatchStatus] = []
+    pending_matches: List[CandidateMatchStatus] = []
+    rejected_matches: List[CandidateMatchStatus] = []
+    total_matches: int = 0
+    summary: Dict[str, int] = Field(default_factory=dict)
+
+class MatchUpdateResponse(BaseModel):
+    """Schema for match status update response"""
+    message: str
+    match_id: str
+    status: str
+    updated_at: datetime
 
 class SkillMatch(BaseModel):
     skill: str

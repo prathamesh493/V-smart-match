@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 class ResumeProfile(BaseModel):
     """Schema for resume data in unified profile"""
@@ -119,3 +119,33 @@ class CandidateReport(BaseModel):
         json_encoders = {
             datetime: lambda dt: dt.isoformat() if dt else None
         }
+
+class CandidateDashboardRequest(BaseModel):
+    """Schema for candidate dashboard request parameters"""
+    include_rejected: bool = Field(default=False, description="Whether to include rejected matches")
+    limit: Optional[int] = Field(default=50, description="Maximum number of matches to return")
+    sort_by: str = Field(default="overall_score", description="Field to sort by")
+    sort_order: str = Field(default="desc", description="Sort order: asc or desc")
+    
+    @validator('sort_by')
+    def validate_sort_by(cls, v):
+        allowed_fields = ["overall_score", "created_at", "updated_at", "job_title"]
+        if v not in allowed_fields:
+            raise ValueError(f"sort_by must be one of: {', '.join(allowed_fields)}")
+        return v
+    
+    @validator('sort_order')
+    def validate_sort_order(cls, v):
+        if v not in ["asc", "desc"]:
+            raise ValueError("sort_order must be 'asc' or 'desc'")
+        return v
+
+class MatchFilters(BaseModel):
+    """Schema for filtering matches in candidate dashboard"""
+    status: Optional[List[str]] = Field(None, description="Filter by status: accepted, pending, rejected")
+    job_title: Optional[str] = Field(None, description="Filter by job title (partial match)")
+    min_score: Optional[float] = Field(None, description="Minimum overall score", ge=0, le=100)
+    max_score: Optional[float] = Field(None, description="Maximum overall score", ge=0, le=100)
+    recruiter_id: Optional[str] = Field(None, description="Filter by specific recruiter")
+    date_from: Optional[datetime] = Field(None, description="Filter matches from this date")
+    date_to: Optional[datetime] = Field(None, description="Filter matches until this date")

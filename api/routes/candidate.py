@@ -1,5 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import Dict, Any, Optional, List
+import asyncio
+
+from api.schemas.match import CandidateMatchStatus, CandidateDashboardResponse
+from api.schemas.candidate import CandidateDashboardRequest, MatchFilters
+from api.schemas.dashboard import DashboardStats, CandidateMatchDetailed, NextStepAction
 
 from api.schemas.candidate import (
     ProfileLinkRequest, 
@@ -13,6 +18,8 @@ from services.firebase import (
     get_unified_candidate_profile,
     get_document
 )
+
+from services.firestore import db
 from api.auth import get_current_user, UserData
 
 router = APIRouter(prefix="/candidate", tags=["candidate"])
@@ -291,3 +298,101 @@ async def get_candidate_basic_info(candidate_id: str):
         "full_name": candidate_doc.get("fullName", ""),
         "email": candidate_doc.get("email", "")
     }
+
+@router.get("/dashboard", response_model=CandidateDashboardResponse)
+async def get_candidate_dashboard(
+    include_rejected: bool = Query(default=False, description="Include rejected matches"),
+    limit: int = Query(default=50, description="Maximum matches to return"),
+    current_user: UserData = Depends(get_current_user)
+):
+    """
+    Get candidate dashboard with matches categorized by status.
+    Efficiently queries only the current candidate's matches from Firestore.
+    """
+    candidate_id = current_user.candidate_id if current_user.candidate_id else current_user.user_id
+    
+    try:
+        # Query only matches for this specific candidate to minimize Firestore reads
+        matches_ref = db.collection("matches").where("candidateId", "==", candidate_id)
+        
+        # Add limit to reduce reads
+        if limit > 0:
+            matches_ref = matches_ref.limit(limit)
+            
+        matches_docs = await asyncio.to_thread(lambda: matches_ref.get())
+        
+        accepted_matches = []
+        pending_matches = []
+        rejected_matches = []
+        
+        # Batch fetch recruiter names to minimize database calls
+        recruiter_cache = {}
+        
+        for match_doc in matches_docs:
+            match_data = match_doc.to_dict()
+            match_data["id"] = match_doc.id
+            
+            # Get recruiter name (with caching)
+            recruiter_name = None
+            recruiter_id = match_data.get("recruiterId")
+            if recruiter_id:
+                if recruiter_id not in recruiter_cache:
+                    try:
+                        recruiter_doc = await get_document("users", recruiter_id)
+                        recruiter_cache[recruiter_id] = recruiter_doc.get("fullName") if recruiter_doc else None
+                    except:
+                        recruiter_cache[recruiter_id] = None
+                recruiter_name = recruiter_cache[recruiter_id]
+            
+            # Create match status object using schema
+            match_status = CandidateMatchStatus(
+                match_id=match_data["id"],
+                job_title=match_data.get("jobTitle", "Untitled Job"),
+                company_name=match_data.get("companyName"),
+                job_description_id=match_data.get("jobDescriptionId", ""),
+                recruiter_id=match_data.get("recruiterId", ""),
+                recruiter_name=recruiter_name,
+                overall_score=match_data.get("overallScore", 0),
+                status=match_data.get("status", "pending"),
+                created_at=match_data.get("created_at"),
+                updated_at=match_data.get("updated_at"),
+                next_step_available=match_data.get("status") == "accepted",
+                recruiter_notes=match_data.get("recruiter_notes")
+            )
+            
+            # Categorize based on status
+            status = match_data.get("status", "pending")
+            if status == "accepted":
+                accepted_matches.append(match_status)
+            elif status == "rejected" and include_rejected:
+                rejected_matches.append(match_status)
+            else:
+                pending_matches.append(match_status)
+        
+        # Sort matches by score (highest first)
+        accepted_matches.sort(key=lambda x: x.overall_score, reverse=True)
+        pending_matches.sort(key=lambda x: x.overall_score, reverse=True)
+        rejected_matches.sort(key=lambda x: x.overall_score, reverse=True)
+        
+        # Create summary statistics
+        total_matches = len(accepted_matches) + len(pending_matches) + len(rejected_matches)
+        summary = {
+            "accepted": len(accepted_matches),
+            "pending": len(pending_matches),
+            "rejected": len(rejected_matches) if include_rejected else 0,
+            "total": total_matches
+        }
+        
+        return CandidateDashboardResponse(
+            accepted_matches=accepted_matches,
+            pending_matches=pending_matches,
+            rejected_matches=rejected_matches if include_rejected else [],
+            total_matches=total_matches,
+            summary=summary
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch candidate dashboard: {str(e)}"
+        )

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/useAuth"
 import { FileText, Github, Code, GraduationCap, Award, Briefcase, ExternalLink, User } from "lucide-react"
 import Header from "@/components/Header"
 import Link from "next/link"
+import ReactMarkdown from 'react-markdown'
 
 export default function CandidateReport() {
   const [reportData, setReportData] = useState(null)
@@ -85,14 +86,42 @@ export default function CandidateReport() {
 
   const { profile, resume, github, leetcode } = reportData
 
-  // Extract skills from resume
-  const resumeSkills = resume?.skills || []
+  // Helper function to extract sections from resume content
+  const extractSection = (content, sectionHeader) => {
+    if (!content) return ""
+    
+    const lines = content.split('\n')
+    let sectionContent = []
+    let inSection = false
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      
+      // Check if we've reached the target section
+      if (line.startsWith(`## ${sectionHeader}`)) {
+        inSection = true
+        sectionContent.push(line) // Include the header
+        continue
+      }
+      
+      // Check if we've reached another section (stop capturing)
+      if (inSection && (line.startsWith('## ') || line.startsWith('# ')) && !line.startsWith(`## ${sectionHeader}`)) {
+        break
+      }
+      
+      // Add lines while in the target section
+      if (inSection) {
+        sectionContent.push(line)
+      }
+    }
+    
+    return sectionContent.join('\n')
+  }
 
-  // Extract education from resume
-  const education = resume?.education || []
-
-  // Extract experience from resume
-  const experience = resume?.experience || []
+  // Extract sections from resume content
+  const skillsContent = extractSection(resume?.extracted_content, 'Skills')
+  const educationContent = extractSection(resume?.extracted_content, 'Education')
+  const experienceContent = extractSection(resume?.extracted_content, 'Work Experience')
 
   // Extract GitHub languages
   const githubLanguages = github?.insights_data?.top_languages || {}
@@ -168,19 +197,15 @@ export default function CandidateReport() {
                 Skills & Expertise
               </h2>
 
-              <div className="flex flex-wrap gap-2">
-                {resumeSkills.map((skill, index) => (
-                  <span key={index} className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
-                    {skill}
-                  </span>
-                ))}
-
-                {resumeSkills.length === 0 && (
-                  <p className="text-white/60 italic">
-                    No skills listed. Update your resume to showcase your abilities.
-                  </p>
-                )}
-              </div>
+              {skillsContent ? (
+                <div className="prose prose-sm max-w-none text-white prose-headings:text-white prose-strong:text-white prose-ul:text-white prose-li:text-white">
+                  <ReactMarkdown>{skillsContent}</ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-white/60 italic">
+                  No skills section found. Update your resume to showcase your abilities.
+                </p>
+              )}
 
               {github?.insights_data?.tech_preferences?.from_readme?.length > 0 && (
                 <div className="mt-6">
@@ -207,19 +232,13 @@ export default function CandidateReport() {
               Education
             </h2>
 
-            {education.length > 0 ? (
-              <div className="space-y-6">
-                {education.map((edu, index) => (
-                  <div key={index} className="border-l-2 border-white/30 pl-4">
-                    <h3 className="text-xl font-semibold">{edu.degree}</h3>
-                    <p className="text-white/80">{edu.institution}</p>
-                    <p className="text-white/60 text-sm">{edu.year}</p>
-                  </div>
-                ))}
+            {educationContent ? (
+              <div className="prose prose-sm max-w-none text-white prose-headings:text-white prose-strong:text-white prose-ul:text-white prose-li:text-white max-h-80 overflow-y-auto">
+                <ReactMarkdown>{educationContent}</ReactMarkdown>
               </div>
             ) : (
               <p className="text-white/60 italic">
-                No education details found. Update your resume to add your educational background.
+                No education section found. Update your resume to add your educational background.
               </p>
             )}
           </div>
@@ -231,20 +250,13 @@ export default function CandidateReport() {
               Experience
             </h2>
 
-            {experience.length > 0 ? (
-              <div className="space-y-6">
-                {experience.map((exp, index) => (
-                  <div key={index} className="border-l-2 border-white/30 pl-4">
-                    <h3 className="text-xl font-semibold">{exp.title}</h3>
-                    <p className="text-white/80">{exp.company}</p>
-                    <p className="text-white/60 text-sm">{exp.duration}</p>
-                    <p className="mt-2 text-white/80">{exp.description}</p>
-                  </div>
-                ))}
+            {experienceContent ? (
+              <div className="prose prose-sm max-w-none text-white prose-headings:text-white prose-strong:text-white prose-ul:text-white prose-li:text-white max-h-80 overflow-y-auto">
+                <ReactMarkdown>{experienceContent}</ReactMarkdown>
               </div>
             ) : (
               <p className="text-white/60 italic">
-                No experience details found. Update your resume to add your work history.
+                No work experience section found. Update your resume to add your work history.
               </p>
             )}
           </div>
@@ -449,8 +461,10 @@ export default function CandidateReport() {
             </h2>
 
             {resume?.extracted_content ? (
-              <div className="bg-white/5 rounded-lg p-6 whitespace-pre-wrap font-mono text-sm overflow-auto max-h-96">
-                {resume.extracted_content}
+              <div className="bg-white/5 rounded-lg p-6 overflow-auto max-h-96">
+                <div className="prose prose-sm max-w-none text-white prose-headings:text-white prose-strong:text-white prose-ul:text-white prose-li:text-white prose-p:text-white prose-a:text-purple-300 hover:prose-a:text-purple-200">
+                  <ReactMarkdown>{resume.extracted_content}</ReactMarkdown>
+                </div>
               </div>
             ) : (
               <div className="text-center py-8">

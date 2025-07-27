@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 import tempfile
 from typing import Optional
-from services.pinecone_service import upsert_embedding
+from services.pinecone_service import upsert_embedding, delete_by_metadata_filter
 from services.embedding import get_embedding
 from ..schemas.resume import ResumeResponse, ErrorResponse
 from services.gemini import extract_resume_data
@@ -80,6 +80,24 @@ async def upload_resume(
     
             # Generate embedding from the clean markdown content
             embedding = get_embedding(markdown_content)
+
+            # Check for and delete existing documents using the email from the resume
+            resume_email = pinecone_metadata.get('email')
+            if resume_email:
+                logger.info(f"Checking for existing documents for email: {resume_email}")
+                try:
+                    deleted_result = delete_by_metadata_filter({"email": resume_email})
+                    if deleted_result == "deleted":
+                        logger.info(f"Deleted existing documents for email {resume_email} using filter")
+                    elif isinstance(deleted_result, int) and deleted_result > 0:
+                        logger.info(f"Deleted {deleted_result} existing documents for email {resume_email}")
+                    else:
+                        logger.info("No existing documents found for this email")
+                except Exception as delete_error:
+                    logger.warning(f"Error deleting existing documents: {str(delete_error)}")
+                    # Continue with the upload even if deletion fails
+            else:
+                logger.warning("No email found in resume metadata for checking existing documents")
 
             # Upsert the embedding to Pinecone with the rich metadata
             logger.info(f"Upserting to Pinecone with metadata: {pinecone_metadata}")

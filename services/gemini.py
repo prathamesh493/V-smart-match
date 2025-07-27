@@ -116,7 +116,7 @@ def convert_json_to_markdown(data: Dict[str, Any]) -> str:
 
 @traceable(name="extract_pinecone_metadata")
 def extract_pinecone_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Extracts key information from the JSON for Pinecone metadata. (No changes needed here)"""
+    """Extracts key information from the JSON for Pinecone metadata."""
     metadata = {}
     personal_info = data.get("personal_info", {})
     metadata['name'] = personal_info.get('name')
@@ -259,6 +259,9 @@ async def extract_resume_data(pdf_path: str) -> Tuple[Dict[str, Any], str, Dict[
     """
     Orchestrates the new resume processing workflow.
     
+    Args:
+        pdf_path: Path to the PDF file
+    
     Returns:
         A tuple containing:
         - pinecone_metadata (Dict): Rich metadata for Pinecone.
@@ -269,7 +272,7 @@ async def extract_resume_data(pdf_path: str) -> Tuple[Dict[str, Any], str, Dict[
         # Step 1: Unpack the new tuple returned by our Gemini function
         parsed_json, usage_metadata = await extract_resume_json_with_gemini(pdf_path)
         
-        # Step 2: Extract rich metadata for Pinecone (no change)
+        # Step 2: Extract rich metadata for Pinecone
         pinecone_metadata = extract_pinecone_metadata(parsed_json)
         
         # Step 3: Convert the JSON back to markdown (no change)

@@ -6,6 +6,7 @@ import os
 import uuid
 from datetime import datetime
 import tempfile
+import asyncio
 from typing import Optional, List, Dict, Any
 
 # --- MODIFIED IMPORTS ---
@@ -20,11 +21,61 @@ from services.pinecone_service import query_embedding
 
 router = APIRouter(prefix="/job-description", tags=["job_description"])
 
+async def process_single_match(pinecone_match: dict, job_id: str, job_content: str, recruiter_id: str, job_title: str):
+    """
+    Process a single pinecone match and generate a detailed match report.
+    Returns None if processing fails.
+    """
+    try:
+        resume_id = pinecone_match['id']
+        score = pinecone_match.get('score')
+        
+        # Fetch resume and associated candidate details
+        resume_doc = await get_document("resumes", resume_id)
+        if not resume_doc or "user_id" not in resume_doc:
+            print(f"Skipping resume {resume_id}, missing content or user_id.")
+            return None
+        
+        candidate_id = resume_doc["user_id"]
+        candidate_doc = await get_document("candidates", candidate_id)
+        if not candidate_doc:
+            print(f"Could not find candidate profile for ID {candidate_id}")
+            return None
+        
+        # Fetch optional profile data
+        github_data = await get_document("github_profiles", candidate_id) if candidate_doc.get("has_github_profile") else None
+        leetcode_data = await get_document("leetcode_profiles", candidate_id) if candidate_doc.get("has_leetcode_profile") else None
+
+        # Generate the detailed match report
+        match_result = await get_match(
+            candidate_id=candidate_id,
+            job_description_id=job_id,
+            resume_content=resume_doc["extracted_content"],
+            job_description_content=job_content,
+            github_data=github_data,
+            leetcode_data=leetcode_data
+        )
+        
+        match_result["candidate_name"] = candidate_doc.get("fullName", "")
+        match_result["candidate_email"] = candidate_doc.get("email", "")
+        match_result["embedding_score"] = score
+        match_result["recruiterId"] = recruiter_id
+        match_result["jobTitle"] = job_title
+        
+        await add_document("matches", match_result["matchId"], match_result)
+        print(f"Created match {match_result['matchId']} for candidate {candidate_id} (embedding_score={score})")
+        
+        return match_result["matchId"]
+        
+    except Exception as e:
+        print(f"Error generating match for resume {pinecone_match.get('id', 'unknown')}: {str(e)}")
+        return None
+
 
 # This is our efficient background task function
 async def find_and_generate_matches(job_id: str, job_content: str, num_matches_to_generate: int, recruiter_id: str, job_title: str):
     """
-    Background task to find top candidates via vector search and generate detailed match reports.
+    Background task to find top candidates via vector search and generate detailed match reports in parallel.
     """
     try:
         print(f"Starting background matching for job ID: {job_id} for {num_matches_to_generate} candidates.")
@@ -44,51 +95,25 @@ async def find_and_generate_matches(job_id: str, job_content: str, num_matches_t
             print(f"No potential candidates found in Pinecone for job {job_id}")
             return
 
-        # 3. Process each potential candidate and generate a full match report
-        for pinecone_match in pinecone_matches:
-            try:
-                resume_id = pinecone_match['id']
-                score = pinecone_match.get('score')
-                # Fetch resume and associated candidate details
-                resume_doc = await get_document("resumes", resume_id)
-                if not resume_doc or "user_id" not in resume_doc:
-                    print(f"Skipping resume {resume_id}, missing content or user_id.")
-                    continue
-                
-                candidate_id = resume_doc["user_id"]
-                candidate_doc = await get_document("candidates", candidate_id)
-                if not candidate_doc:
-                    print(f"Could not find candidate profile for ID {candidate_id}")
-                    continue
-                
-                # Fetch optional profile data
-                github_data = await get_document("github_profiles", candidate_id) if candidate_doc.get("has_github_profile") else None
-                leetcode_data = await get_document("leetcode_profiles", candidate_id) if candidate_doc.get("has_leetcode_profile") else None
-
-                # Generate the detailed match report
-                match_result = await get_match(
-                    candidate_id=candidate_id,
-                    job_description_id=job_id,
-                    resume_content=resume_doc["extracted_content"],
-                    job_description_content=job_content,
-                    github_data=github_data,
-                    leetcode_data=leetcode_data
-                )
-                
-                match_result["candidate_name"] = candidate_doc.get("fullName", "")
-                match_result["candidate_email"] = candidate_doc.get("email", "")
-                match_result["embedding_score"] = score
-                match_result["recruiterId"] = recruiter_id
-                match_result["jobTitle"] = job_title
-                
-                await add_document("matches", match_result["matchId"], match_result)
-                print(f"Created match {match_result['matchId']} for candidate {candidate_id} (embedding_score={score})")
-
-            except Exception as e:
-                print(f"Error generating match for resume {resume_id}: {str(e)}")
-                continue
-                
+        # 3. Process all potential candidates in parallel using asyncio.gather
+        print(f"Processing {len(pinecone_matches)} candidates in parallel...")
+        
+        tasks = [
+            process_single_match(pinecone_match, job_id, job_content, recruiter_id, job_title)
+            for pinecone_match in pinecone_matches
+        ]
+        
+        # Execute all tasks in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Count successful matches
+        successful_matches = [r for r in results if r is not None and not isinstance(r, Exception)]
+        failed_matches = [r for r in results if isinstance(r, Exception)]
+        
         print(f"Completed background matching for job ID: {job_id}")
+        print(f"Successfully created {len(successful_matches)} matches")
+        if failed_matches:
+            print(f"Failed to process {len(failed_matches)} matches")
 
     except Exception as e:
         print(f"FATAL Error in background matching task for job {job_id}: {str(e)}")

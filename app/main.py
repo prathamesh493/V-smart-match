@@ -40,14 +40,13 @@ class UserIdContextMiddleware(BaseHTTPMiddleware):
                 decoded_token = firebase_auth.verify_id_token(bearer_token)
                 user_id = decoded_token.get("uid")
             except Exception as e:
-                print(f"Firebase token verify failed: {e}")
+                logger.warning("Firebase token verification failed", error=str(e))
         user_id_var.set(user_id)
         # Set user.id on OpenTelemetry span for Jaeger searchability
         span = trace.get_current_span()
-        if user_id and span.is_recording():
+        if user_id and span and span.is_recording():
             span.set_attribute("user.id", user_id)
-        # [Optional] Log for debugging:
-        print(f"User ID set in context: {user_id}")
+            logger.debug("User ID set in context", user_id=user_id)
         response = await call_next(request)
         return response
 
@@ -55,7 +54,7 @@ class UserIdContextMiddleware(BaseHTTPMiddleware):
 app.add_middleware(UserIdContextMiddleware)
 
 
-FastAPIInstrumentor.instrument_app(app,excluded_urls="/metrics",)
+FastAPIInstrumentor.instrument_app(app, excluded_urls="/metrics",)
 RequestsInstrumentor().instrument()
 
 

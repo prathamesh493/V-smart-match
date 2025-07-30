@@ -10,22 +10,59 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from starlette_prometheus import PrometheusMiddleware, metrics
 import structlog
-
-from app.observability.logging_config import setup_logging
-from app.observability.tracing import setup_tracing
+from firebase_admin import auth as firebase_auth
+from app.observability.logging_config import user_id_var
+from opentelemetry import trace
+from starlette.middleware.base import BaseHTTPMiddleware
+from app.observability.logging_config import setup_logging # Functions we made
+from app.observability.tracing import setup_tracing # Functions we made
 
 from api.routes import health, resume, match, profile, job_description, candidate, github, mcq, chatbot
 
-setup_logging()
-setup_tracing()
-
-logger = structlog.get_logger(__name__)
 
 app = FastAPI(
     title="VSmart API",
     description="API for resume parsing, job matching, and profile aggregation",
     version="0.1.0"
 )
+
+
+class UserIdContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path == "/metrics":
+            # Proceed without setting user_id or span attributes.
+            return await call_next(request)
+        user_id = None
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            bearer_token = auth_header.split(" ", 1)[1]
+            try:
+                decoded_token = firebase_auth.verify_id_token(bearer_token)
+                user_id = decoded_token.get("uid")
+            except Exception as e:
+                print(f"Firebase token verify failed: {e}")
+        user_id_var.set(user_id)
+        # Set user.id on OpenTelemetry span for Jaeger searchability
+        span = trace.get_current_span()
+        if user_id and span.is_recording():
+            span.set_attribute("user.id", user_id)
+        # [Optional] Log for debugging:
+        print(f"User ID set in context: {user_id}")
+        response = await call_next(request)
+        return response
+
+# Add the middleware in your main.py before routers
+app.add_middleware(UserIdContextMiddleware)
+
+
+FastAPIInstrumentor.instrument_app(app,excluded_urls="/metrics",)
+RequestsInstrumentor().instrument()
+
+
+setup_logging()
+setup_tracing()
+
+logger = structlog.get_logger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,8 +75,6 @@ app.add_middleware(
 app.add_middleware(PrometheusMiddleware)
 app.add_route("/metrics", metrics)
 
-FastAPIInstrumentor.instrument_app(app)
-RequestsInstrumentor().instrument()
 
 # Routers
 app.include_router(health.router, prefix="/api", tags=["health"])

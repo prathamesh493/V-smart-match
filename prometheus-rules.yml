@@ -3,11 +3,11 @@
 groups:
   - name: jaeger-spanmetrics-alias
     rules:
-      - record: service_latency_bucket
-        expr: spanmetrics_latency_bucket
-      - record: service_latency_sum
-        expr: spanmetrics_latency_sum
-      - record: service_latency_count
-        expr: spanmetrics_latency_count
-      - record: service_calls_total
-        expr: spanmetrics_calls_total
+      - record: calls_total
+        expr: traces_span_metrics_calls_total
+      - record: duration_milliseconds_sum
+        expr: traces_span_metrics_duration_milliseconds_sum
+      - record: duration_milliseconds_count
+        expr: traces_span_metrics_duration_milliseconds_count
+      - record: duration_milliseconds_bucket
+        expr: traces_span_metrics_duration_milliseconds_bucket

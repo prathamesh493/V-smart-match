@@ -6,9 +6,6 @@ receivers:
       grpc:
         endpoint: 0.0.0.0:4317
 
-processors:
-  batch: {}
-
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
@@ -17,18 +14,24 @@ exporters:
     tls:
       insecure: true
 
+processors:
+  batch: {}
+
 connectors:
   spanmetrics:
     histogram:
+      unit: "ms"
       explicit:
-        buckets: [100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s]
+        buckets: [5,10,25,50,75,100,250,500,750,1000,2500,5000,7500,10000,30000,60000,90000]
     dimensions:
       - name: http.method
-        default: GET
       - name: http.status_code
     metrics_flush_interval: 15s
 
 service:
+  telemetry:
+    logs:
+      level: debug
   pipelines:
     traces:
       receivers: [otlp]
@@ -38,3 +41,4 @@ service:
       receivers: [spanmetrics]
       processors: [batch]
       exporters: [prometheus]
+      

@@ -12,10 +12,6 @@ def setup_tracing():
     resource = Resource.create({SERVICE_NAME: "vsmart-backend"})
     provider = TracerProvider(resource=resource)
 
-    # ❗ THE FIX IS HERE ❗
-    # We read the endpoint from an environment variable.
-    # The default value is for local non-docker testing.
-    # Docker Compose will provide the correct value.
     otel_exporter_otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
 
     print(f"✅ Configuring OTLP gRPC exporter to send traces to: {otel_exporter_otlp_endpoint}")

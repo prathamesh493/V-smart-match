@@ -33,18 +33,20 @@ services:
       - monitoring
 
   jaeger:
-    image: jaegertracing/all-in-one:1.53
+    image: jaegertracing/all-in-one:latest
     environment:
       - METRICS_STORAGE_TYPE=prometheus
       - PROMETHEUS_SERVER_URL=http://prometheus:9090
-      - PROMETHEUS_ENDPOINT=0.0.0.0:8889
+      - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
       - PROMETHEUS_QUERY_NORMALIZE_CALLS=true
       - PROMETHEUS_QUERY_NORMALIZE_DURATION=true
     ports:
       - "16686:16686"
       - "4317:4317"
+      - "8888:8888"
     networks:
       - monitoring
+
 
   prometheus:
     image: prom/prometheus:latest

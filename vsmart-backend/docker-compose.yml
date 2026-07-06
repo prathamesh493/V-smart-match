@@ -1,0 +1,68 @@
+services:
+  backend:
+    build: .
+    container_name: vsmart-backend
+    user: "${UID}:${GID}"
+    ports:
+      - "8000:8000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - HF_HOME=/app/huggingface_cache
+    volumes:
+      - .:/app
+      - hf_cache:/app/huggingface_cache
+    depends_on:
+      - otel-collector
+      - jaeger
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - monitoring
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol-contrib/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otelcol-contrib/otel-collector-config.yml
+    ports:
+      - "54317:54317"
+      - "8889:8889"
+    depends_on:
+      - jaeger
+    networks:
+      - monitoring
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://prometheus:9090
+      - PROMETHEUS_QUERY_SUPPORT_SPANMETRICS_CONNECTOR=true
+      - PROMETHEUS_QUERY_NORMALIZE_CALLS=true
+      - PROMETHEUS_QUERY_NORMALIZE_DURATION=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "8888:8888"
+    networks:
+      - monitoring
+
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus-rules.yml:/etc/prometheus/prometheus-rules.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  hf_cache:

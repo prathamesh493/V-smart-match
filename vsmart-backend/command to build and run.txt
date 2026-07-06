@@ -1,0 +1,32 @@
+On Linux / Ubuntu
+You must include the UID and GID variables to avoid permission errors.
+
+To start the application:
+
+Bash
+
+UID=$(id -u) GID=$(id -g) docker-compose up
+
+
+To rebuild and start:
+
+Bash
+
+UID=$(id -u) GID=$(id -g) docker-compose up --build
+
+
+
+On Windows (with Docker Desktop) or macOS
+You do not need the UID and GID variables.
+
+To start the application:
+
+Bash
+
+docker-compose up
+To rebuild and start:
+
+Bash
+
+docker-compose up --build
+Just choose the command that matches the system you're on at the moment.

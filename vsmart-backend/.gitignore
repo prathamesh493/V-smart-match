@@ -1,0 +1,52 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+
+# FastAPI specific
+.env
+.env.local
+.env.development
+.env.production
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Log files
+*.log
+logs/
+
+# Data files and uploads
+data/
+data/resumes/
+data/jd/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Documentation
+docs/_build/
+site/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+firebase-credentials.json
+
+# Testing files (dummy credentials for testing only)
+.env

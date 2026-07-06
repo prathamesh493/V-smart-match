@@ -1,0 +1,25 @@
+# jaeger.yaml (for all Jaeger components; place in your repo root)
+
+extensions:
+  jaeger_storage:
+    backends:
+      badger:
+        type: badger
+        path: /badgerdata
+    metric_backends:
+      prom:
+        prometheus:
+          endpoint: http://prometheus:9090
+
+  jaeger_query:
+    traces: badger
+    metrics_storage: prom
+
+frontend:
+  monitor:
+    menuEnabled: true
+collector:
+  otlp:
+    enabled: true
+    grpc:
+      port: 4317

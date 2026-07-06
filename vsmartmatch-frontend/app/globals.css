@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: 198 38 158;
+  --secondary: 79 70 229;
+  --background: 255 255 255;
+  --foreground: 0 0 0;
+  --card: 255 255 255;
+  --card-foreground: 0 0 0;
+  --popover: 255 255 255;
+  --popover-foreground: 0 0 0;
+  --muted: 240 240 240;
+  --muted-foreground: 107 114 128;
+  --accent: 240 240 240;
+  --accent-foreground: 0 0 0;
+  --destructive: 220 38 38;
+  --destructive-foreground: 255 255 255;
+  --border: 229 231 235;
+  --input: 229 231 235;
+  --ring: 198 38 158;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center px-6 py-3 text-lg font-semibold text-white bg-primary rounded-full shadow-lg hover:bg-primary/80 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-300 ease-in-out;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center px-6 py-3 text-lg font-semibold text-white bg-secondary rounded-full shadow-lg hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-secondary focus:ring-offset-2 transition-all duration-300 ease-in-out;
+  }
+
+  .card {
+    @apply bg-white shadow-md rounded-lg p-6 mb-4;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fadeInUp 0.8s ease-out;
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
